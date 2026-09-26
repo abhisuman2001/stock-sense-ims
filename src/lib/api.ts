@@ -128,6 +128,9 @@ export const api = {
   updateProduct: (id: number, data: Partial<Product>) =>
     request<Product>(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
+  deleteProduct: (id: number) =>
+    request<{ message: string; id: number; sku?: string }>(`/products/${id}`, { method: 'DELETE' }),
+
   // Stock Quants
   getStock: (warehouse_id?: number) =>
     request<StockQuant[]>(`/stock${warehouse_id ? `?warehouse_id=${warehouse_id}` : ''}`),

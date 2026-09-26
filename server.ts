@@ -748,9 +748,11 @@ async function startServer() {
     return res.json(newCat);
   });
 
-  // --- 5. PRODUCTS & CATALOG ---
+  // --- 5. PRODUCTS & CATALOG (RESTful Product Entity: GET, POST, PUT, DELETE) ---
+  const productRouter = express.Router();
 
-  app.get('/api/products', (req: Request, res: Response) => {
+  // GET /products - List all products with optional filters
+  productRouter.get('/', (req: Request, res: Response) => {
     const user = getCurrentUser(req);
     const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
 
@@ -786,8 +788,8 @@ async function startServer() {
     return res.json(formatted);
   });
 
-  // Lookup product by SKU (Optical barcode / QR scanner direct API)
-  app.get('/api/products/sku/:sku', (req: Request, res: Response) => {
+  // GET /products/sku/:sku - Barcode & QR code scanner lookup
+  productRouter.get('/sku/:sku', (req: Request, res: Response) => {
     const user = getCurrentUser(req);
     const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
     const targetSku = req.params.sku.trim().toUpperCase();
@@ -827,11 +829,17 @@ async function startServer() {
     });
   });
 
-  app.get('/api/products/:id', (req: Request, res: Response) => {
+  // GET /products/:id - Retrieve single product by ID
+  productRouter.get('/:id', (req: Request, res: Response) => {
     const user = getCurrentUser(req);
     const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
-    const p = DB.products.find((prod) => prod.id === Number(req.params.id));
+    const prodId = Number(req.params.id);
 
+    if (isNaN(prodId)) {
+      return res.status(400).json({ detail: 'Invalid product ID' });
+    }
+
+    const p = DB.products.find((prod) => prod.id === prodId);
     if (!p) {
       return res.status(404).json({ detail: 'Product not found' });
     }
@@ -852,13 +860,24 @@ async function startServer() {
       cost: isManager ? p.cost : null,
       total_on_hand: totalOnHand,
       total_free_to_use: totalFree,
+      location_quants: quants.map((q) => {
+        const loc = DB.locations.find((l) => l.id === q.locationId);
+        const wh = loc ? DB.warehouses.find((w) => w.id === loc.warehouseId) : null;
+        return {
+          location_id: q.locationId,
+          location_name: loc ? loc.name : 'Unknown',
+          warehouse_code: wh ? wh.shortCode : 'WH',
+          on_hand: q.onHand,
+          free_to_use: q.freeToUse,
+        };
+      }),
     });
   });
 
-  // Create Product (Manager only)
-  app.post('/api/products', requireRole('inventory_manager'), (req: Request, res: Response) => {
+  // POST /products - Create new Product
+  productRouter.post('/', requireRole('inventory_manager'), (req: Request, res: Response) => {
     const { sku, name, category_id, uom, reorder_point, cost, initial_stock, initial_location_id } = req.body;
-    if (!sku || !name) {
+    if (!sku || !name || !sku.trim() || !name.trim()) {
       return res.status(400).json({ detail: 'SKU and product name are required' });
     }
     const cleanSku = sku.trim().toUpperCase();
@@ -866,25 +885,30 @@ async function startServer() {
       return res.status(400).json({ detail: `SKU '${cleanSku}' already exists` });
     }
 
+    const nextId = DB.products.length > 0 ? Math.max(...DB.products.map((p) => p.id)) + 1 : 1;
     const newProd: Product = {
-      id: DB.products.length + 1,
+      id: nextId,
       sku: cleanSku,
       name: name.trim(),
       categoryId: category_id ? Number(category_id) : null,
-      uom: uom || 'Units',
-      reorderPoint: Number(reorder_point) || 10.0,
-      cost: Number(cost) || 0.0,
+      uom: (uom || 'Units').trim(),
+      reorderPoint: Number(reorder_point) >= 0 ? Number(reorder_point) : 10.0,
+      cost: Number(cost) >= 0 ? Number(cost) : 0.0,
     };
     DB.products.push(newProd);
 
     if (initial_stock && Number(initial_stock) > 0 && initial_location_id) {
-      DB.stockQuants.push({
-        productId: newProd.id,
-        locationId: Number(initial_location_id),
-        onHand: Number(initial_stock),
-        reserved: 0.0,
-        freeToUse: Number(initial_stock),
-      });
+      const locId = Number(initial_location_id);
+      const locExists = DB.locations.some((l) => l.id === locId);
+      if (locExists) {
+        DB.stockQuants.push({
+          productId: newProd.id,
+          locationId: locId,
+          onHand: Number(initial_stock),
+          reserved: 0.0,
+          freeToUse: Number(initial_stock),
+        });
+      }
     }
     persistDatabase();
 
@@ -893,7 +917,7 @@ async function startServer() {
     const totalOnHand = quants.reduce((sum, q) => sum + q.onHand, 0);
     const totalFree = quants.reduce((sum, q) => sum + q.freeToUse, 0);
 
-    return res.json({
+    return res.status(201).json({
       id: newProd.id,
       sku: newProd.sku,
       name: newProd.name,
@@ -907,22 +931,51 @@ async function startServer() {
     });
   });
 
-  // Update Product (Manager only)
-  app.put('/api/products/:id', requireRole('inventory_manager'), (req: Request, res: Response) => {
-    const p = DB.products.find((prod) => prod.id === Number(req.params.id));
+  // PUT /products/:id - Update product details
+  productRouter.put('/:id', requireRole('inventory_manager'), (req: Request, res: Response) => {
+    const prodId = Number(req.params.id);
+    if (isNaN(prodId)) {
+      return res.status(400).json({ detail: 'Invalid product ID' });
+    }
+
+    const p = DB.products.find((prod) => prod.id === prodId);
     if (!p) {
       return res.status(404).json({ detail: 'Product not found' });
     }
 
-    const { name, category_id, uom, reorder_point, cost } = req.body;
-    if (name !== undefined) p.name = name.trim();
+    const { sku, name, category_id, uom, reorder_point, cost } = req.body;
+
+    if (sku !== undefined) {
+      const cleanSku = sku.trim().toUpperCase();
+      if (!cleanSku) {
+        return res.status(400).json({ detail: 'SKU cannot be empty' });
+      }
+      if (DB.products.some((other) => other.id !== prodId && other.sku === cleanSku)) {
+        return res.status(400).json({ detail: `SKU '${cleanSku}' already in use by another product` });
+      }
+      p.sku = cleanSku;
+    }
+
+    if (name !== undefined) {
+      const cleanName = name.trim();
+      if (!cleanName) {
+        return res.status(400).json({ detail: 'Product name cannot be empty' });
+      }
+      p.name = cleanName;
+    }
+
     if (category_id !== undefined) p.categoryId = category_id ? Number(category_id) : null;
     if (uom !== undefined) p.uom = uom.trim();
-    if (reorder_point !== undefined) p.reorderPoint = Number(reorder_point);
-    if (cost !== undefined) p.cost = Number(cost);
+    if (reorder_point !== undefined) p.reorderPoint = Math.max(0, Number(reorder_point) || 0);
+    if (cost !== undefined) p.cost = Math.max(0, Number(cost) || 0);
 
     persistDatabase();
+
     const cat = DB.categories.find((c) => c.id === p.categoryId);
+    const quants = DB.stockQuants.filter((q) => q.productId === p.id);
+    const totalOnHand = quants.reduce((sum, q) => sum + q.onHand, 0);
+    const totalFree = quants.reduce((sum, q) => sum + q.freeToUse, 0);
+
     return res.json({
       id: p.id,
       sku: p.sku,
@@ -932,8 +985,62 @@ async function startServer() {
       uom: p.uom,
       reorder_point: p.reorderPoint,
       cost: p.cost,
+      total_on_hand: totalOnHand,
+      total_free_to_use: totalFree,
     });
   });
+
+  // DELETE /products/:id - Delete product with inventory safety checks
+  productRouter.delete('/:id', requireRole('inventory_manager'), (req: Request, res: Response) => {
+    const prodId = Number(req.params.id);
+    if (isNaN(prodId)) {
+      return res.status(400).json({ detail: 'Invalid product ID' });
+    }
+
+    const idx = DB.products.findIndex((prod) => prod.id === prodId);
+    if (idx === -1) {
+      return res.status(404).json({ detail: 'Product not found' });
+    }
+    const product = DB.products[idx];
+
+    // Check physical inventory: cannot delete product with positive on-hand inventory
+    const activeQuants = DB.stockQuants.filter((q) => q.productId === prodId);
+    const totalOnHand = activeQuants.reduce((sum, q) => sum + q.onHand, 0);
+    if (totalOnHand > 0) {
+      return res.status(400).json({
+        detail: `Cannot delete product '${product.sku}' because it has ${totalOnHand} ${product.uom} on hand in storage bays. Adjust stock to 0 before deleting.`,
+      });
+    }
+
+    // Check pending operations: cannot delete product referenced in draft/waiting/ready operations
+    const pendingOpWithProduct = DB.operations.find(
+      (op) =>
+        ['draft', 'waiting', 'ready'].includes(op.status) &&
+        op.lines.some((l) => l.productId === prodId)
+    );
+    if (pendingOpWithProduct) {
+      return res.status(400).json({
+        detail: `Cannot delete product '${product.sku}' because it is included in pending operation ${pendingOpWithProduct.reference} (${pendingOpWithProduct.status}).`,
+      });
+    }
+
+    // Clean up zero/empty stock quants
+    DB.stockQuants = DB.stockQuants.filter((q) => q.productId !== prodId);
+
+    // Remove product from catalog
+    DB.products.splice(idx, 1);
+    persistDatabase();
+
+    return res.json({
+      message: `Product '${product.sku}' (${product.name}) has been deleted successfully.`,
+      id: prodId,
+      sku: product.sku,
+    });
+  });
+
+  // Mount productRouter at both /api/products and /products
+  app.use('/api/products', productRouter);
+  app.use('/products', productRouter);
 
   // --- 6. PHYSICAL STOCK QUANT LEDGER ---
 
