@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Warehouse, Location, User } from '../types';
 import { useTheme } from '../context/ThemeContext';
+import { ThemeToggle } from './ThemeToggle';
 import {
   Building2,
   MapPin,
@@ -216,11 +217,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ currentUser }) =
 
       {/* Appearance & Theme Configuration Box */}
       <div className="bg-[#262420] border border-[#34312B] p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <Paintbrush className="w-4 h-4 text-[#F2C230]" />
-          <h3 className="text-xs font-mono uppercase tracking-wider text-[#F5F3EF] font-bold">
-            Appearance & Visual Theme
-          </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <Paintbrush className="w-4 h-4 text-[#F2C230]" />
+            <h3 className="text-xs font-mono uppercase tracking-wider text-[#F5F3EF] font-bold">
+              Appearance & Visual Theme
+            </h3>
+          </div>
+          <ThemeToggle />
         </div>
         <p className="text-xs text-[#8B8478] mb-4">
           Select your terminal display profile. Off-white light mode utilizes warm alabaster tones (#F4F1EA) to prevent optical eye strain in bright warehouse daylight, while dark mode provides high-contrast industrial ergonomics.
