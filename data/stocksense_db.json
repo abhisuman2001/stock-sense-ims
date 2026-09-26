@@ -1,0 +1,402 @@
+{
+  "warehouses": [
+    {
+      "id": 1,
+      "name": "Main Central Facility",
+      "shortCode": "WH",
+      "address": "Dock 4B, Industrial Zone West"
+    },
+    {
+      "id": 2,
+      "name": "Cold Storage Annex",
+      "shortCode": "CS",
+      "address": "Sector 7, North Logistics Park"
+    }
+  ],
+  "users": [
+    {
+      "id": 1,
+      "email": "demo@stocksense.io",
+      "passwordHash": "Password123!",
+      "fullName": "Sarah Connor",
+      "role": "inventory_manager",
+      "assignedWarehouseId": 1,
+      "createdAt": "2026-08-27T09:19:35.958Z"
+    },
+    {
+      "id": 2,
+      "email": "staff@stocksense.io",
+      "passwordHash": "Password123!",
+      "fullName": "John Reese",
+      "role": "floor_operator",
+      "assignedWarehouseId": 1,
+      "createdAt": "2026-09-01T09:19:35.958Z"
+    },
+    {
+      "id": 3,
+      "email": "alex.vance@stocksense.io",
+      "passwordHash": "Password123!",
+      "fullName": "Alex Vance",
+      "role": "floor_operator",
+      "assignedWarehouseId": 2,
+      "createdAt": "2026-09-06T09:19:35.958Z"
+    }
+  ],
+  "otps": [],
+  "locations": [
+    {
+      "id": 1,
+      "name": "General Stock Storage",
+      "shortCode": "STOCK",
+      "warehouseId": 1
+    },
+    {
+      "id": 2,
+      "name": "Incoming Goods Bay",
+      "shortCode": "INPUT",
+      "warehouseId": 1
+    },
+    {
+      "id": 3,
+      "name": "Outbound Dispatch Dock",
+      "shortCode": "OUTPUT",
+      "warehouseId": 1
+    },
+    {
+      "id": 4,
+      "name": "Damaged / Scrap Hold",
+      "shortCode": "SCRAP",
+      "warehouseId": 1
+    },
+    {
+      "id": 5,
+      "name": "Cold Room Vault",
+      "shortCode": "STOCK",
+      "warehouseId": 2
+    },
+    {
+      "id": 6,
+      "name": "Chilled Inbound Bay",
+      "shortCode": "INPUT",
+      "warehouseId": 2
+    },
+    {
+      "id": 7,
+      "name": "Reefer Staging Dock",
+      "shortCode": "OUTPUT",
+      "warehouseId": 2
+    }
+  ],
+  "categories": [
+    {
+      "id": 1,
+      "name": "Raw Materials & Metals"
+    },
+    {
+      "id": 2,
+      "name": "Electronics & Sensors"
+    },
+    {
+      "id": 3,
+      "name": "Hardware & Fasteners"
+    },
+    {
+      "id": 4,
+      "name": "Finished Assemblies"
+    }
+  ],
+  "products": [
+    {
+      "id": 1,
+      "sku": "STL-ROD-12",
+      "name": "Steel Rod 12mm Cold-Rolled",
+      "categoryId": 1,
+      "uom": "Meters",
+      "cost": 18.5,
+      "reorderPoint": 60
+    },
+    {
+      "id": 2,
+      "sku": "SEN-MOD-42",
+      "name": "Infrared Sensor Module V2",
+      "categoryId": 2,
+      "uom": "Units",
+      "cost": 7.2,
+      "reorderPoint": 30
+    },
+    {
+      "id": 3,
+      "sku": "LTH-BAT-24",
+      "name": "Lithium-Ion Battery Pack 24V",
+      "categoryId": 2,
+      "uom": "Units",
+      "cost": 85,
+      "reorderPoint": 20
+    },
+    {
+      "id": 4,
+      "sku": "SCR-HEX-M8",
+      "name": "Hex Bolt M8x40mm High-Tensile (Box 100)",
+      "categoryId": 3,
+      "uom": "Boxes",
+      "cost": 14.5,
+      "reorderPoint": 45
+    },
+    {
+      "id": 5,
+      "sku": "MOT-BLDC-48",
+      "name": "Brushless DC Motor 48V 750W",
+      "categoryId": 4,
+      "uom": "Units",
+      "cost": 125,
+      "reorderPoint": 15
+    },
+    {
+      "id": 6,
+      "sku": "PNE-VLV-10",
+      "name": "Pneumatic Directional Solenoid Valve",
+      "categoryId": 4,
+      "uom": "Units",
+      "cost": 46,
+      "reorderPoint": 25
+    }
+  ],
+  "stockQuants": [
+    {
+      "productId": 1,
+      "locationId": 1,
+      "onHand": 120,
+      "reserved": 20,
+      "freeToUse": 100
+    },
+    {
+      "productId": 2,
+      "locationId": 1,
+      "onHand": 22,
+      "reserved": 0,
+      "freeToUse": 22
+    },
+    {
+      "productId": 3,
+      "locationId": 1,
+      "onHand": 8,
+      "reserved": 8,
+      "freeToUse": 0
+    },
+    {
+      "productId": 4,
+      "locationId": 1,
+      "onHand": 120,
+      "reserved": 15,
+      "freeToUse": 105
+    },
+    {
+      "productId": 5,
+      "locationId": 1,
+      "onHand": 35,
+      "reserved": 0,
+      "freeToUse": 35
+    },
+    {
+      "productId": 6,
+      "locationId": 1,
+      "onHand": 14,
+      "reserved": 0,
+      "freeToUse": 14
+    },
+    {
+      "productId": 3,
+      "locationId": 5,
+      "onHand": 24,
+      "reserved": 0,
+      "freeToUse": 24
+    }
+  ],
+  "sequences": {
+    "WH_receipt": 4,
+    "WH_delivery": 3,
+    "WH_internal": 2,
+    "WH_adjustment": 2,
+    "CS_receipt": 2,
+    "CS_delivery": 1,
+    "CS_internal": 1,
+    "CS_adjustment": 1
+  },
+  "operations": [
+    {
+      "id": 1,
+      "reference": "WH/IN/0001",
+      "type": "receipt",
+      "sourceLocationId": 2,
+      "destLocationId": 1,
+      "contact": "Nippon Steel Supplies Corp",
+      "scheduleDate": "2026-09-24T09:19:35.958Z",
+      "status": "done",
+      "responsibleUserId": 1,
+      "createdAt": "2026-09-24T09:19:35.958Z",
+      "lines": [
+        {
+          "id": 1,
+          "operationId": 1,
+          "productId": 1,
+          "quantity": 50
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "reference": "WH/IN/0002",
+      "type": "receipt",
+      "sourceLocationId": 2,
+      "destLocationId": 1,
+      "contact": "Sensirion Tech Ltd",
+      "scheduleDate": "2026-09-26T15:19:35.958Z",
+      "status": "ready",
+      "responsibleUserId": 2,
+      "createdAt": "2026-09-25T23:19:35.958Z",
+      "lines": [
+        {
+          "id": 2,
+          "operationId": 2,
+          "productId": 2,
+          "quantity": 40
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "reference": "WH/IN/0003",
+      "type": "receipt",
+      "sourceLocationId": 2,
+      "destLocationId": 1,
+      "contact": "Apex Fasteners GmbH",
+      "scheduleDate": "2026-09-27T09:19:35.958Z",
+      "status": "done",
+      "responsibleUserId": 1,
+      "createdAt": "2026-09-26T08:19:35.958Z",
+      "lines": [
+        {
+          "id": 3,
+          "operationId": 3,
+          "productId": 4,
+          "quantity": 25
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "reference": "WH/OUT/0001",
+      "type": "delivery",
+      "sourceLocationId": 1,
+      "destLocationId": 3,
+      "contact": "Tesla Gigafactory Assembly Bay 9",
+      "scheduleDate": "2026-09-27T09:19:35.958Z",
+      "status": "waiting",
+      "responsibleUserId": 1,
+      "createdAt": "2026-09-26T01:19:35.958Z",
+      "lines": [
+        {
+          "id": 4,
+          "operationId": 4,
+          "productId": 3,
+          "quantity": 16
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "reference": "WH/OUT/0002",
+      "type": "delivery",
+      "sourceLocationId": 1,
+      "destLocationId": 3,
+      "contact": "RoboDrive Dynamics Inc",
+      "scheduleDate": "2026-09-26T13:19:35.958Z",
+      "status": "ready",
+      "responsibleUserId": 2,
+      "createdAt": "2026-09-26T04:19:35.958Z",
+      "lines": [
+        {
+          "id": 5,
+          "operationId": 5,
+          "productId": 1,
+          "quantity": 20
+        },
+        {
+          "id": 6,
+          "operationId": 5,
+          "productId": 4,
+          "quantity": 15
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "reference": "WH/INT/0001",
+      "type": "internal",
+      "sourceLocationId": 1,
+      "destLocationId": 5,
+      "contact": "Cold Storage Redistribution Transfer",
+      "scheduleDate": "2026-09-26T21:19:35.958Z",
+      "status": "ready",
+      "responsibleUserId": 1,
+      "createdAt": "2026-09-26T05:19:35.958Z",
+      "lines": [
+        {
+          "id": 7,
+          "operationId": 6,
+          "productId": 3,
+          "quantity": 4
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "reference": "WH/ADJ/0001",
+      "type": "adjustment",
+      "sourceLocationId": 1,
+      "destLocationId": 4,
+      "contact": "Q3 Cycle Count Correction (2 damaged)",
+      "scheduleDate": "2026-09-22T09:19:35.958Z",
+      "status": "done",
+      "responsibleUserId": 1,
+      "createdAt": "2026-09-22T09:19:35.958Z",
+      "lines": [
+        {
+          "id": 8,
+          "operationId": 7,
+          "productId": 5,
+          "quantity": 2
+        }
+      ]
+    }
+  ],
+  "stockMoves": [
+    {
+      "id": 1,
+      "operationId": 1,
+      "productId": 1,
+      "fromLocationId": 2,
+      "toLocationId": 1,
+      "quantity": 50,
+      "movedAt": "2026-09-24T09:19:35.958Z"
+    },
+    {
+      "id": 2,
+      "operationId": 7,
+      "productId": 5,
+      "fromLocationId": 1,
+      "toLocationId": 4,
+      "quantity": 2,
+      "movedAt": "2026-09-22T09:19:35.958Z"
+    },
+    {
+      "id": 3,
+      "operationId": 3,
+      "productId": 4,
+      "fromLocationId": 2,
+      "toLocationId": 1,
+      "quantity": 25,
+      "movedAt": "2026-09-26T09:19:35.959Z"
+    }
+  ]
+}

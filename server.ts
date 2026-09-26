@@ -1,12 +1,18 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // --- DATA TYPES ---
 export type OperationType = 'receipt' | 'delivery' | 'internal' | 'adjustment';
 export type OperationStatus = 'draft' | 'waiting' | 'ready' | 'done' | 'cancelled';
 export type UserRole = 'inventory_manager' | 'floor_operator';
 
-interface User {
+export interface User {
   id: number;
   email: string;
   passwordHash: string;
@@ -16,7 +22,7 @@ interface User {
   createdAt: string;
 }
 
-interface OTPRecord {
+export interface OTPRecord {
   id: number;
   email: string;
   otpCode: string;
@@ -24,26 +30,26 @@ interface OTPRecord {
   isUsed: boolean;
 }
 
-interface Warehouse {
+export interface Warehouse {
   id: number;
   name: string;
   shortCode: string;
   address?: string;
 }
 
-interface Location {
+export interface Location {
   id: number;
   name: string;
   shortCode: string;
   warehouseId: number;
 }
 
-interface Category {
+export interface Category {
   id: number;
   name: string;
 }
 
-interface Product {
+export interface Product {
   id: number;
   sku: string;
   name: string;
@@ -53,7 +59,7 @@ interface Product {
   cost: number;
 }
 
-interface StockQuant {
+export interface StockQuant {
   productId: number;
   locationId: number;
   onHand: number;
@@ -61,14 +67,14 @@ interface StockQuant {
   freeToUse: number;
 }
 
-interface OperationLine {
+export interface OperationLine {
   id: number;
   operationId: number;
   productId: number;
   quantity: number;
 }
 
-interface Operation {
+export interface Operation {
   id: number;
   reference: string;
   type: OperationType;
@@ -82,7 +88,7 @@ interface Operation {
   lines: OperationLine[];
 }
 
-interface StockMove {
+export interface StockMove {
   id: number;
   operationId: number;
   productId: number;
@@ -92,212 +98,279 @@ interface StockMove {
   movedAt: string;
 }
 
-// In-Memory Database store with realistic multi-warehouse seed data
-const DB = {
-  warehouses: [
-    { id: 1, name: 'Main Central Facility', shortCode: 'WH', address: 'Dock 4B, Industrial Zone West' },
-    { id: 2, name: 'Cold Storage Annex', shortCode: 'CS', address: 'Sector 7, North Logistics Park' },
-  ] as Warehouse[],
+export interface DatabaseSchema {
+  warehouses: Warehouse[];
+  users: User[];
+  otps: OTPRecord[];
+  locations: Location[];
+  categories: Category[];
+  products: Product[];
+  stockQuants: StockQuant[];
+  sequences: Record<string, number>;
+  operations: Operation[];
+  stockMoves: StockMove[];
+}
 
-  users: [
-    {
-      id: 1,
-      email: 'demo@stocksense.io',
-      passwordHash: 'Password123!',
-      fullName: 'Sarah Connor',
-      role: 'inventory_manager' as UserRole,
-      assignedWarehouseId: 1,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 2,
-      email: 'staff@stocksense.io',
-      passwordHash: 'Password123!',
-      fullName: 'Alex Vance',
-      role: 'floor_operator' as UserRole,
-      assignedWarehouseId: 1,
-      createdAt: new Date().toISOString(),
-    },
-  ] as User[],
+// Default initial database seed
+function getInitialSeed(): DatabaseSchema {
+  return {
+    warehouses: [
+      { id: 1, name: 'Main Central Facility', shortCode: 'WH', address: 'Dock 4B, Industrial Zone West' },
+      { id: 2, name: 'Cold Storage Annex', shortCode: 'CS', address: 'Sector 7, North Logistics Park' },
+    ],
 
-  otps: [] as OTPRecord[],
+    users: [
+      {
+        id: 1,
+        email: 'demo@stocksense.io',
+        passwordHash: 'Password123!',
+        fullName: 'Sarah Connor',
+        role: 'inventory_manager',
+        assignedWarehouseId: 1,
+        createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+      },
+      {
+        id: 2,
+        email: 'staff@stocksense.io',
+        passwordHash: 'Password123!',
+        fullName: 'John Reese',
+        role: 'floor_operator',
+        assignedWarehouseId: 1,
+        createdAt: new Date(Date.now() - 25 * 86400000).toISOString(),
+      },
+      {
+        id: 3,
+        email: 'alex.vance@stocksense.io',
+        passwordHash: 'Password123!',
+        fullName: 'Alex Vance',
+        role: 'floor_operator',
+        assignedWarehouseId: 2,
+        createdAt: new Date(Date.now() - 20 * 86400000).toISOString(),
+      },
+    ],
 
-  locations: [
-    { id: 1, name: 'General Stock Storage', shortCode: 'STOCK', warehouseId: 1 },
-    { id: 2, name: 'Incoming Goods Bay', shortCode: 'INPUT', warehouseId: 1 },
-    { id: 3, name: 'Outbound Dispatch Dock', shortCode: 'OUTPUT', warehouseId: 1 },
-    { id: 4, name: 'Damaged / Scrap Hold', shortCode: 'SCRAP', warehouseId: 1 },
-    { id: 5, name: 'Cold Room Vault', shortCode: 'STOCK', warehouseId: 2 },
-    { id: 6, name: 'Chilled Inbound Bay', shortCode: 'INPUT', warehouseId: 2 },
-    { id: 7, name: 'Reefer Staging Dock', shortCode: 'OUTPUT', warehouseId: 2 },
-  ] as Location[],
+    otps: [],
 
-  categories: [
-    { id: 1, name: 'Raw Materials & Metals' },
-    { id: 2, name: 'Electronics & Sensors' },
-    { id: 3, name: 'Hardware & Fasteners' },
-    { id: 4, name: 'Finished Assemblies' },
-  ] as Category[],
+    locations: [
+      { id: 1, name: 'General Stock Storage', shortCode: 'STOCK', warehouseId: 1 },
+      { id: 2, name: 'Incoming Goods Bay', shortCode: 'INPUT', warehouseId: 1 },
+      { id: 3, name: 'Outbound Dispatch Dock', shortCode: 'OUTPUT', warehouseId: 1 },
+      { id: 4, name: 'Damaged / Scrap Hold', shortCode: 'SCRAP', warehouseId: 1 },
+      { id: 5, name: 'Cold Room Vault', shortCode: 'STOCK', warehouseId: 2 },
+      { id: 6, name: 'Chilled Inbound Bay', shortCode: 'INPUT', warehouseId: 2 },
+      { id: 7, name: 'Reefer Staging Dock', shortCode: 'OUTPUT', warehouseId: 2 },
+    ],
 
-  products: [
-    { id: 1, sku: 'STL-ROD-12', name: 'Steel Rod 12mm Cold-Rolled', categoryId: 1, uom: 'Meters', cost: 18.5, reorderPoint: 60.0 },
-    { id: 2, sku: 'SEN-MOD-42', name: 'Infrared Sensor Module V2', categoryId: 2, uom: 'Units', cost: 7.2, reorderPoint: 30.0 },
-    { id: 3, sku: 'LTH-BAT-24', name: 'Lithium-Ion Battery Pack 24V', categoryId: 2, uom: 'Units', cost: 85.0, reorderPoint: 20.0 },
-    { id: 4, sku: 'SCR-HEX-M8', name: 'Hex Bolt M8x40mm High-Tensile (Box 100)', categoryId: 3, uom: 'Boxes', cost: 14.5, reorderPoint: 45.0 },
-    { id: 5, sku: 'MOT-BLDC-48', name: 'Brushless DC Motor 48V 750W', categoryId: 4, uom: 'Units', cost: 125.0, reorderPoint: 15.0 },
-    { id: 6, sku: 'PNE-VLV-10', name: 'Pneumatic Directional Solenoid Valve', categoryId: 4, uom: 'Units', cost: 46.0, reorderPoint: 25.0 },
-  ] as Product[],
+    categories: [
+      { id: 1, name: 'Raw Materials & Metals' },
+      { id: 2, name: 'Electronics & Sensors' },
+      { id: 3, name: 'Hardware & Fasteners' },
+      { id: 4, name: 'Finished Assemblies' },
+    ],
 
-  stockQuants: [
-    { productId: 1, locationId: 1, onHand: 120.0, reserved: 20.0, freeToUse: 100.0 },
-    { productId: 2, locationId: 1, onHand: 22.0, reserved: 0.0, freeToUse: 22.0 }, // LOW
-    { productId: 3, locationId: 1, onHand: 8.0, reserved: 8.0, freeToUse: 0.0 },   // CRITICAL LOW
-    { productId: 4, locationId: 1, onHand: 120.0, reserved: 15.0, freeToUse: 105.0 },
-    { productId: 5, locationId: 1, onHand: 35.0, reserved: 0.0, freeToUse: 35.0 },
-    { productId: 6, locationId: 1, onHand: 14.0, reserved: 0.0, freeToUse: 14.0 }, // LOW
-    { productId: 3, locationId: 5, onHand: 24.0, reserved: 0.0, freeToUse: 24.0 },
-  ] as StockQuant[],
+    products: [
+      { id: 1, sku: 'STL-ROD-12', name: 'Steel Rod 12mm Cold-Rolled', categoryId: 1, uom: 'Meters', cost: 18.5, reorderPoint: 60.0 },
+      { id: 2, sku: 'SEN-MOD-42', name: 'Infrared Sensor Module V2', categoryId: 2, uom: 'Units', cost: 7.2, reorderPoint: 30.0 },
+      { id: 3, sku: 'LTH-BAT-24', name: 'Lithium-Ion Battery Pack 24V', categoryId: 2, uom: 'Units', cost: 85.0, reorderPoint: 20.0 },
+      { id: 4, sku: 'SCR-HEX-M8', name: 'Hex Bolt M8x40mm High-Tensile (Box 100)', categoryId: 3, uom: 'Boxes', cost: 14.5, reorderPoint: 45.0 },
+      { id: 5, sku: 'MOT-BLDC-48', name: 'Brushless DC Motor 48V 750W', categoryId: 4, uom: 'Units', cost: 125.0, reorderPoint: 15.0 },
+      { id: 6, sku: 'PNE-VLV-10', name: 'Pneumatic Directional Solenoid Valve', categoryId: 4, uom: 'Units', cost: 46.0, reorderPoint: 25.0 },
+    ],
 
-  sequences: {
-    'WH_receipt': 4,
-    'WH_delivery': 3,
-    'WH_internal': 2,
-    'WH_adjustment': 2,
-    'CS_receipt': 2,
-    'CS_delivery': 1,
-    'CS_internal': 1,
-    'CS_adjustment': 1,
-  } as Record<string, number>,
+    stockQuants: [
+      { productId: 1, locationId: 1, onHand: 120.0, reserved: 20.0, freeToUse: 100.0 },
+      { productId: 2, locationId: 1, onHand: 22.0, reserved: 0.0, freeToUse: 22.0 }, // LOW
+      { productId: 3, locationId: 1, onHand: 8.0, reserved: 8.0, freeToUse: 0.0 },   // CRITICAL LOW
+      { productId: 4, locationId: 1, onHand: 120.0, reserved: 15.0, freeToUse: 105.0 },
+      { productId: 5, locationId: 1, onHand: 35.0, reserved: 0.0, freeToUse: 35.0 },
+      { productId: 6, locationId: 1, onHand: 14.0, reserved: 0.0, freeToUse: 14.0 }, // LOW
+      { productId: 3, locationId: 5, onHand: 24.0, reserved: 0.0, freeToUse: 24.0 },
+    ],
 
-  operations: [
-    {
-      id: 1,
-      reference: 'WH/IN/0001',
-      type: 'receipt',
-      sourceLocationId: 2,
-      destLocationId: 1,
-      contact: 'Nippon Steel Supplies Corp',
-      scheduleDate: new Date(Date.now() - 2 * 86400000).toISOString(),
-      status: 'done',
-      responsibleUserId: 1,
-      createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-      lines: [{ id: 1, operationId: 1, productId: 1, quantity: 50.0 }],
+    sequences: {
+      'WH_receipt': 4,
+      'WH_delivery': 3,
+      'WH_internal': 2,
+      'WH_adjustment': 2,
+      'CS_receipt': 2,
+      'CS_delivery': 1,
+      'CS_internal': 1,
+      'CS_adjustment': 1,
     },
-    {
-      id: 2,
-      reference: 'WH/IN/0002',
-      type: 'receipt',
-      sourceLocationId: 2,
-      destLocationId: 1,
-      contact: 'Sensirion Tech Ltd',
-      scheduleDate: new Date(Date.now() + 6 * 3600000).toISOString(),
-      status: 'ready',
-      responsibleUserId: 2, // Assigned to Alex Vance
-      createdAt: new Date(Date.now() - 10 * 3600000).toISOString(),
-      lines: [{ id: 2, operationId: 2, productId: 2, quantity: 40.0 }],
-    },
-    {
-      id: 3,
-      reference: 'WH/IN/0003',
-      type: 'receipt',
-      sourceLocationId: 2,
-      destLocationId: 1,
-      contact: 'Apex Fasteners GmbH',
-      scheduleDate: new Date(Date.now() + 24 * 3600000).toISOString(),
-      status: 'done',
-      responsibleUserId: 1,
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-      lines: [{ id: 3, operationId: 3, productId: 4, quantity: 25.0 }],
-    },
-    {
-      id: 4,
-      reference: 'WH/OUT/0001',
-      type: 'delivery',
-      sourceLocationId: 1,
-      destLocationId: 3,
-      contact: 'Tesla Gigafactory Assembly Bay 9',
-      scheduleDate: new Date(Date.now() + 24 * 3600000).toISOString(),
-      status: 'waiting',
-      responsibleUserId: 1,
-      createdAt: new Date(Date.now() - 8 * 3600000).toISOString(),
-      lines: [{ id: 4, operationId: 4, productId: 3, quantity: 16.0 }],
-    },
-    {
-      id: 5,
-      reference: 'WH/OUT/0002',
-      type: 'delivery',
-      sourceLocationId: 1,
-      destLocationId: 3,
-      contact: 'RoboDrive Dynamics Inc',
-      scheduleDate: new Date(Date.now() + 4 * 3600000).toISOString(),
-      status: 'ready',
-      responsibleUserId: 2, // Assigned to Alex Vance
-      createdAt: new Date(Date.now() - 5 * 3600000).toISOString(),
-      lines: [
-        { id: 5, operationId: 5, productId: 1, quantity: 20.0 },
-        { id: 6, operationId: 5, productId: 4, quantity: 15.0 },
-      ],
-    },
-    {
-      id: 6,
-      reference: 'WH/INT/0001',
-      type: 'internal',
-      sourceLocationId: 1,
-      destLocationId: 5,
-      contact: 'Cold Storage Redistribution Transfer',
-      scheduleDate: new Date(Date.now() + 12 * 3600000).toISOString(),
-      status: 'ready',
-      responsibleUserId: 1,
-      createdAt: new Date(Date.now() - 4 * 3600000).toISOString(),
-      lines: [{ id: 7, operationId: 6, productId: 3, quantity: 4.0 }],
-    },
-    {
-      id: 7,
-      reference: 'WH/ADJ/0001',
-      type: 'adjustment',
-      sourceLocationId: 1,
-      destLocationId: 4,
-      contact: 'Q3 Cycle Count Correction (2 damaged)',
-      scheduleDate: new Date(Date.now() - 4 * 86400000).toISOString(),
-      status: 'done',
-      responsibleUserId: 1,
-      createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
-      lines: [{ id: 8, operationId: 7, productId: 5, quantity: 2.0 }],
-    },
-  ] as Operation[],
 
-  stockMoves: [
-    {
-      id: 1,
-      operationId: 1,
-      productId: 1,
-      fromLocationId: 2,
-      toLocationId: 1,
-      quantity: 50.0,
-      movedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-    },
-    {
-      id: 2,
-      operationId: 7,
-      productId: 5,
-      fromLocationId: 1,
-      toLocationId: 4,
-      quantity: 2.0,
-      movedAt: new Date(Date.now() - 4 * 86400000).toISOString(),
-    },
-    {
-      id: 3,
-      operationId: 3,
-      productId: 4,
-      fromLocationId: 2,
-      toLocationId: 1,
-      quantity: 25.0,
-      movedAt: new Date().toISOString(),
-    },
-  ] as StockMove[],
-};
+    operations: [
+      {
+        id: 1,
+        reference: 'WH/IN/0001',
+        type: 'receipt',
+        sourceLocationId: 2,
+        destLocationId: 1,
+        contact: 'Nippon Steel Supplies Corp',
+        scheduleDate: new Date(Date.now() - 2 * 86400000).toISOString(),
+        status: 'done',
+        responsibleUserId: 1,
+        createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+        lines: [{ id: 1, operationId: 1, productId: 1, quantity: 50.0 }],
+      },
+      {
+        id: 2,
+        reference: 'WH/IN/0002',
+        type: 'receipt',
+        sourceLocationId: 2,
+        destLocationId: 1,
+        contact: 'Sensirion Tech Ltd',
+        scheduleDate: new Date(Date.now() + 6 * 3600000).toISOString(),
+        status: 'ready',
+        responsibleUserId: 2, // Assigned to John Reese
+        createdAt: new Date(Date.now() - 10 * 3600000).toISOString(),
+        lines: [{ id: 2, operationId: 2, productId: 2, quantity: 40.0 }],
+      },
+      {
+        id: 3,
+        reference: 'WH/IN/0003',
+        type: 'receipt',
+        sourceLocationId: 2,
+        destLocationId: 1,
+        contact: 'Apex Fasteners GmbH',
+        scheduleDate: new Date(Date.now() + 24 * 3600000).toISOString(),
+        status: 'done',
+        responsibleUserId: 1,
+        createdAt: new Date(Date.now() - 3600000).toISOString(),
+        lines: [{ id: 3, operationId: 3, productId: 4, quantity: 25.0 }],
+      },
+      {
+        id: 4,
+        reference: 'WH/OUT/0001',
+        type: 'delivery',
+        sourceLocationId: 1,
+        destLocationId: 3,
+        contact: 'Tesla Gigafactory Assembly Bay 9',
+        scheduleDate: new Date(Date.now() + 24 * 3600000).toISOString(),
+        status: 'waiting',
+        responsibleUserId: 1,
+        createdAt: new Date(Date.now() - 8 * 3600000).toISOString(),
+        lines: [{ id: 4, operationId: 4, productId: 3, quantity: 16.0 }],
+      },
+      {
+        id: 5,
+        reference: 'WH/OUT/0002',
+        type: 'delivery',
+        sourceLocationId: 1,
+        destLocationId: 3,
+        contact: 'RoboDrive Dynamics Inc',
+        scheduleDate: new Date(Date.now() + 4 * 3600000).toISOString(),
+        status: 'ready',
+        responsibleUserId: 2, // Assigned to John Reese
+        createdAt: new Date(Date.now() - 5 * 3600000).toISOString(),
+        lines: [
+          { id: 5, operationId: 5, productId: 1, quantity: 20.0 },
+          { id: 6, operationId: 5, productId: 4, quantity: 15.0 },
+        ],
+      },
+      {
+        id: 6,
+        reference: 'WH/INT/0001',
+        type: 'internal',
+        sourceLocationId: 1,
+        destLocationId: 5,
+        contact: 'Cold Storage Redistribution Transfer',
+        scheduleDate: new Date(Date.now() + 12 * 3600000).toISOString(),
+        status: 'ready',
+        responsibleUserId: 1,
+        createdAt: new Date(Date.now() - 4 * 3600000).toISOString(),
+        lines: [{ id: 7, operationId: 6, productId: 3, quantity: 4.0 }],
+      },
+      {
+        id: 7,
+        reference: 'WH/ADJ/0001',
+        type: 'adjustment',
+        sourceLocationId: 1,
+        destLocationId: 4,
+        contact: 'Q3 Cycle Count Correction (2 damaged)',
+        scheduleDate: new Date(Date.now() - 4 * 86400000).toISOString(),
+        status: 'done',
+        responsibleUserId: 1,
+        createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+        lines: [{ id: 8, operationId: 7, productId: 5, quantity: 2.0 }],
+      },
+    ],
 
-// --- AUTH & RBAC MIDDLEWARES ---
+    stockMoves: [
+      {
+        id: 1,
+        operationId: 1,
+        productId: 1,
+        fromLocationId: 2,
+        toLocationId: 1,
+        quantity: 50.0,
+        movedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+      },
+      {
+        id: 2,
+        operationId: 7,
+        productId: 5,
+        fromLocationId: 1,
+        toLocationId: 4,
+        quantity: 2.0,
+        movedAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+      },
+      {
+        id: 3,
+        operationId: 3,
+        productId: 4,
+        fromLocationId: 2,
+        toLocationId: 1,
+        quantity: 25.0,
+        movedAt: new Date().toISOString(),
+      },
+    ],
+  };
+}
+
+// Local Persistent File Database
+const DATA_DIR = path.join(process.cwd(), 'data');
+const DB_FILE = path.join(DATA_DIR, 'stocksense_db.json');
+
+function initLocalDatabase(): DatabaseSchema {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+
+    if (fs.existsSync(DB_FILE)) {
+      const content = fs.readFileSync(DB_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (parsed && Array.isArray(parsed.products) && Array.isArray(parsed.operations)) {
+        return parsed as DatabaseSchema;
+      }
+    }
+  } catch (err) {
+    console.warn('Notice: Could not load existing local database file, initializing pristine seed:', err);
+  }
+
+  const initial = getInitialSeed();
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to write initial database file:', err);
+  }
+  return initial;
+}
+
+const DB = initLocalDatabase();
+
+function persistDatabase() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(DB_FILE, JSON.stringify(DB, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error persisting database to disk:', err);
+  }
+}
+
+// --- AUTH & RBAC HELPERS ---
 
 function getCurrentUser(req: Request): User {
   const auth = req.headers.authorization;
@@ -345,14 +418,99 @@ function getNextReference(warehouseId: number, type: OperationType): string {
   DB.sequences[key] = currentSeq + 1;
 
   const paddedSeq = String(currentSeq).padStart(4, '0');
+  persistDatabase();
   return `${whCode}/${typeCode}/${paddedSeq}`;
+}
+
+// Standard Operation Formatter
+function formatOp(op: Operation) {
+  const src = DB.locations.find((l) => l.id === op.sourceLocationId);
+  const dst = DB.locations.find((l) => l.id === op.destLocationId);
+  const user = DB.users.find((u) => u.id === op.responsibleUserId);
+
+  return {
+    id: op.id,
+    reference: op.reference,
+    type: op.type,
+    source_location_id: op.sourceLocationId,
+    source_location_name: src ? src.name : null,
+    dest_location_id: op.destLocationId,
+    dest_location_name: dst ? dst.name : null,
+    contact: op.contact || null,
+    schedule_date: op.scheduleDate,
+    status: op.status,
+    responsible_user_id: op.responsibleUserId,
+    responsible_user_name: user ? user.fullName : null,
+    created_at: op.createdAt,
+    lines: op.lines.map((line) => {
+      const prod = DB.products.find((p) => p.id === line.productId);
+      return {
+        id: line.id,
+        product_id: line.productId,
+        product_name: prod ? prod.name : 'Product',
+        sku: prod ? prod.sku : 'SKU',
+        uom: prod ? prod.uom : 'Units',
+        quantity: line.quantity,
+      };
+    }),
+  };
 }
 
 async function startServer() {
   const app = express();
   app.use(express.json());
 
-  // --- AUTH ROUTES ---
+  // API Request Logger
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    if (req.path.startsWith('/api')) {
+      console.log(`[API ${new Date().toISOString().slice(11, 19)}] ${req.method} ${req.path}`);
+    }
+    next();
+  });
+
+  // --- 1. HEALTH CHECK & SYSTEM DIAGNOSTICS ---
+  app.get('/api/health', (_req: Request, res: Response) => {
+    return res.json({
+      status: 'healthy',
+      uptime_seconds: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString(),
+      version: '2.4.0',
+      database: {
+        warehouses: DB.warehouses.length,
+        products: DB.products.length,
+        stock_quants: DB.stockQuants.length,
+        operations: DB.operations.length,
+        immutable_moves: DB.stockMoves.length,
+        storage_type: 'local_file_backed',
+      },
+    });
+  });
+
+  // Database Reset Endpoint (for testing/judging demonstrations)
+  app.post('/api/database/reset', requireRole('inventory_manager'), (_req: Request, res: Response) => {
+    const initial = getInitialSeed();
+    Object.assign(DB, initial);
+    persistDatabase();
+    return res.json({ message: 'Database reset to default seed state successfully.' });
+  });
+
+  // --- 2. AUTHENTICATION & SESSION ENDPOINTS ---
+
+  app.get('/api/auth/me', (req: Request, res: Response) => {
+    const user = getCurrentUser(req);
+    const wh = DB.warehouses.find((w) => w.id === user.assignedWarehouseId);
+
+    return res.json({
+      id: user.id,
+      email: user.email,
+      full_name: user.fullName,
+      role: user.role,
+      assigned_warehouse_id: user.assignedWarehouseId,
+      assigned_warehouse_code: wh ? wh.shortCode : 'WH',
+      assigned_warehouse_name: wh ? wh.name : 'Main Central Facility',
+    });
+  });
+
   app.post('/api/auth/signup', (req: Request, res: Response) => {
     const { email, password, full_name, role, assigned_warehouse_id } = req.body;
     if (!email || !password || !full_name || !role) {
@@ -377,6 +535,7 @@ async function startServer() {
       createdAt: new Date().toISOString(),
     };
     DB.users.push(newUser);
+    persistDatabase();
 
     const wh = DB.warehouses.find((w) => w.id === newUser.assignedWarehouseId);
 
@@ -435,6 +594,7 @@ async function startServer() {
       expiresAt: Date.now() + 15 * 60 * 1000,
       isUsed: false,
     });
+    persistDatabase();
 
     return res.json({
       message: 'OTP sent to registered email.',
@@ -462,15 +622,31 @@ async function startServer() {
 
     user.passwordHash = new_password;
     record.isUsed = true;
+    persistDatabase();
     return res.json({ message: 'Password reset successfully. You may now login.' });
   });
 
-  // --- WAREHOUSE & LOCATION ROUTES (RBAC ENFORCED) ---
+  // List all registered users (for operation assignment, manager only)
+  app.get('/api/users', requireRole('inventory_manager'), (_req: Request, res: Response) => {
+    const users = DB.users.map((u) => {
+      const wh = DB.warehouses.find((w) => w.id === u.assignedWarehouseId);
+      return {
+        id: u.id,
+        email: u.email,
+        full_name: u.fullName,
+        role: u.role,
+        assigned_warehouse_id: u.assignedWarehouseId,
+        assigned_warehouse_code: wh ? wh.shortCode : null,
+      };
+    });
+    return res.json(users);
+  });
+
+  // --- 3. WAREHOUSES & LOCATIONS ---
   app.get('/api/warehouses', (_req: Request, res: Response) => {
     return res.json(DB.warehouses);
   });
 
-  // Restricted to Inventory Manager
   app.post('/api/warehouses', requireRole('inventory_manager'), (req: Request, res: Response) => {
     const { name, short_code, address } = req.body;
     if (!name || !short_code) {
@@ -489,11 +665,13 @@ async function startServer() {
     };
     DB.warehouses.push(newWh);
 
+    // Bootstrap default zones for new warehouse
     DB.locations.push(
       { id: DB.locations.length + 1, name: 'General Stock', shortCode: 'STOCK', warehouseId: newWh.id },
       { id: DB.locations.length + 2, name: 'Inbound Receiving Bay', shortCode: 'INPUT', warehouseId: newWh.id },
       { id: DB.locations.length + 3, name: 'Outbound Dispatch Bay', shortCode: 'OUTPUT', warehouseId: newWh.id }
     );
+    persistDatabase();
 
     return res.json(newWh);
   });
@@ -517,7 +695,6 @@ async function startServer() {
     return res.json(formatted);
   });
 
-  // Restricted to Inventory Manager
   app.post('/api/locations', requireRole('inventory_manager'), (req: Request, res: Response) => {
     const { name, short_code, warehouse_id } = req.body;
     if (!name || !short_code || !warehouse_id) {
@@ -536,6 +713,7 @@ async function startServer() {
       warehouseId: Number(warehouse_id),
     };
     DB.locations.push(newLoc);
+    persistDatabase();
 
     const wh = DB.warehouses.find((w) => w.id === newLoc.warehouseId);
     return res.json({
@@ -547,7 +725,7 @@ async function startServer() {
     });
   });
 
-  // --- CATEGORIES ---
+  // --- 4. PRODUCT CATEGORIES ---
   app.get('/api/categories', (_req: Request, res: Response) => {
     return res.json(DB.categories);
   });
@@ -566,10 +744,12 @@ async function startServer() {
       name: cleanName,
     };
     DB.categories.push(newCat);
+    persistDatabase();
     return res.json(newCat);
   });
 
-  // --- PRODUCTS (RBAC ENFORCED) ---
+  // --- 5. PRODUCTS & CATALOG ---
+
   app.get('/api/products', (req: Request, res: Response) => {
     const user = getCurrentUser(req);
     const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
@@ -606,7 +786,76 @@ async function startServer() {
     return res.json(formatted);
   });
 
-  // Restricted to Inventory Manager
+  // Lookup product by SKU (Optical barcode / QR scanner direct API)
+  app.get('/api/products/sku/:sku', (req: Request, res: Response) => {
+    const user = getCurrentUser(req);
+    const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
+    const targetSku = req.params.sku.trim().toUpperCase();
+
+    const p = DB.products.find((prod) => prod.sku.toUpperCase() === targetSku);
+    if (!p) {
+      return res.status(404).json({ detail: `Product with SKU '${targetSku}' not found in catalog` });
+    }
+
+    const cat = DB.categories.find((c) => c.id === p.categoryId);
+    const quants = DB.stockQuants.filter((q) => q.productId === p.id);
+    const totalOnHand = quants.reduce((sum, q) => sum + q.onHand, 0);
+    const totalFree = quants.reduce((sum, q) => sum + q.freeToUse, 0);
+
+    return res.json({
+      id: p.id,
+      sku: p.sku,
+      name: p.name,
+      category_id: p.categoryId,
+      category_name: cat ? cat.name : null,
+      uom: p.uom,
+      reorder_point: p.reorderPoint,
+      cost: isManager ? p.cost : null,
+      total_on_hand: totalOnHand,
+      total_free_to_use: totalFree,
+      location_quants: quants.map((q) => {
+        const loc = DB.locations.find((l) => l.id === q.locationId);
+        const wh = loc ? DB.warehouses.find((w) => w.id === loc.warehouseId) : null;
+        return {
+          location_id: q.locationId,
+          location_name: loc ? loc.name : 'Unknown',
+          warehouse_code: wh ? wh.shortCode : 'WH',
+          on_hand: q.onHand,
+          free_to_use: q.freeToUse,
+        };
+      }),
+    });
+  });
+
+  app.get('/api/products/:id', (req: Request, res: Response) => {
+    const user = getCurrentUser(req);
+    const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
+    const p = DB.products.find((prod) => prod.id === Number(req.params.id));
+
+    if (!p) {
+      return res.status(404).json({ detail: 'Product not found' });
+    }
+
+    const cat = DB.categories.find((c) => c.id === p.categoryId);
+    const quants = DB.stockQuants.filter((q) => q.productId === p.id);
+    const totalOnHand = quants.reduce((sum, q) => sum + q.onHand, 0);
+    const totalFree = quants.reduce((sum, q) => sum + q.freeToUse, 0);
+
+    return res.json({
+      id: p.id,
+      sku: p.sku,
+      name: p.name,
+      category_id: p.categoryId,
+      category_name: cat ? cat.name : null,
+      uom: p.uom,
+      reorder_point: p.reorderPoint,
+      cost: isManager ? p.cost : null,
+      total_on_hand: totalOnHand,
+      total_free_to_use: totalFree,
+    });
+  });
+
+  // Create Product (Manager only)
   app.post('/api/products', requireRole('inventory_manager'), (req: Request, res: Response) => {
     const { sku, name, category_id, uom, reorder_point, cost, initial_stock, initial_location_id } = req.body;
     if (!sku || !name) {
@@ -637,6 +886,7 @@ async function startServer() {
         freeToUse: Number(initial_stock),
       });
     }
+    persistDatabase();
 
     const cat = DB.categories.find((c) => c.id === newProd.categoryId);
     const quants = DB.stockQuants.filter((q) => q.productId === newProd.id);
@@ -657,7 +907,36 @@ async function startServer() {
     });
   });
 
-  // --- STOCK QUANTS (RBAC ENFORCED) ---
+  // Update Product (Manager only)
+  app.put('/api/products/:id', requireRole('inventory_manager'), (req: Request, res: Response) => {
+    const p = DB.products.find((prod) => prod.id === Number(req.params.id));
+    if (!p) {
+      return res.status(404).json({ detail: 'Product not found' });
+    }
+
+    const { name, category_id, uom, reorder_point, cost } = req.body;
+    if (name !== undefined) p.name = name.trim();
+    if (category_id !== undefined) p.categoryId = category_id ? Number(category_id) : null;
+    if (uom !== undefined) p.uom = uom.trim();
+    if (reorder_point !== undefined) p.reorderPoint = Number(reorder_point);
+    if (cost !== undefined) p.cost = Number(cost);
+
+    persistDatabase();
+    const cat = DB.categories.find((c) => c.id === p.categoryId);
+    return res.json({
+      id: p.id,
+      sku: p.sku,
+      name: p.name,
+      category_id: p.categoryId,
+      category_name: cat ? cat.name : null,
+      uom: p.uom,
+      reorder_point: p.reorderPoint,
+      cost: p.cost,
+    });
+  });
+
+  // --- 6. PHYSICAL STOCK QUANT LEDGER ---
+
   app.get('/api/stock', (req: Request, res: Response) => {
     const user = getCurrentUser(req);
     const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
@@ -699,7 +978,7 @@ async function startServer() {
     return res.json(formatted);
   });
 
-  // Restricted to Inventory Manager: arbitrary stock count override
+  // Inline Stock Override (Manager only)
   app.put('/api/stock/:productId/:locationId', requireRole('inventory_manager'), (req: Request, res: Response) => {
     const pId = Number(req.params.productId);
     const locId = Number(req.params.locationId);
@@ -723,6 +1002,7 @@ async function startServer() {
       quant.onHand = Number(on_hand);
       quant.freeToUse = Math.max(0, quant.onHand - quant.reserved);
     }
+    persistDatabase();
 
     const p = DB.products.find((prod) => prod.id === quant.productId);
     const loc = DB.locations.find((l) => l.id === quant.locationId);
@@ -745,45 +1025,84 @@ async function startServer() {
     });
   });
 
-  // --- OPERATIONS (UNIFIED LIFECYCLE WITH RBAC) ---
-  function formatOp(op: Operation) {
-    const src = DB.locations.find((l) => l.id === op.sourceLocationId);
-    const dst = DB.locations.find((l) => l.id === op.destLocationId);
-    const user = DB.users.find((u) => u.id === op.responsibleUserId);
+  // Discrepancy Reconciliation / Quick Cycle Count Adjustment
+  app.post('/api/stock/discrepancy', (req: Request, res: Response) => {
+    const user = getCurrentUser(req);
+    const { product_id, location_id, physical_count, reason } = req.body;
 
-    return {
-      id: op.id,
-      reference: op.reference,
-      type: op.type,
-      source_location_id: op.sourceLocationId,
-      source_location_name: src ? src.name : null,
-      dest_location_id: op.destLocationId,
-      dest_location_name: dst ? dst.name : null,
-      contact: op.contact || null,
-      schedule_date: op.scheduleDate,
-      status: op.status,
-      responsible_user_id: op.responsibleUserId,
-      responsible_user_name: user ? user.fullName : null,
-      created_at: op.createdAt,
-      lines: op.lines.map((line) => {
-        const prod = DB.products.find((p) => p.id === line.productId);
-        return {
-          id: line.id,
-          product_id: line.productId,
-          product_name: prod ? prod.name : 'Product',
-          sku: prod ? prod.sku : 'SKU',
-          uom: prod ? prod.uom : 'Units',
-          quantity: line.quantity,
-        };
-      }),
+    if (!product_id || !location_id || physical_count === undefined) {
+      return res.status(400).json({ detail: 'Product, location, and counted physical quantity are required' });
+    }
+
+    const count = Number(physical_count);
+    if (isNaN(count) || count < 0) {
+      return res.status(400).json({ detail: 'Physical count must be a non-negative number' });
+    }
+
+    let quant = DB.stockQuants.find((q) => q.productId === Number(product_id) && q.locationId === Number(location_id));
+    const previousOnHand = quant ? quant.onHand : 0;
+    const diff = count - previousOnHand;
+
+    if (!quant) {
+      quant = {
+        productId: Number(product_id),
+        locationId: Number(location_id),
+        onHand: count,
+        reserved: 0,
+        freeToUse: count,
+      };
+      DB.stockQuants.push(quant);
+    } else {
+      quant.onHand = count;
+      quant.freeToUse = Math.max(0, quant.onHand - quant.reserved);
+    }
+
+    // Auto-create validated adjustment operation in ledger
+    const loc = DB.locations.find((l) => l.id === Number(location_id));
+    const whId = loc ? loc.warehouseId : (user.assignedWarehouseId || 1);
+    const ref = getNextReference(whId, 'adjustment');
+
+    const opId = DB.operations.length + 1;
+    const newOp: Operation = {
+      id: opId,
+      reference: ref,
+      type: 'adjustment',
+      sourceLocationId: Number(location_id),
+      destLocationId: Number(location_id),
+      contact: reason ? `Cycle Count: ${reason}` : 'Physical Cycle Count Reconciliation',
+      scheduleDate: new Date().toISOString(),
+      status: 'done',
+      responsibleUserId: user.id,
+      createdAt: new Date().toISOString(),
+      lines: [{ id: opId * 100, operationId: opId, productId: Number(product_id), quantity: Math.abs(diff) }],
     };
-  }
+    DB.operations.push(newOp);
+
+    DB.stockMoves.push({
+      id: DB.stockMoves.length + 1,
+      operationId: opId,
+      productId: Number(product_id),
+      fromLocationId: diff < 0 ? Number(location_id) : null,
+      toLocationId: diff > 0 ? Number(location_id) : null,
+      quantity: Math.abs(diff),
+      movedAt: new Date().toISOString(),
+    });
+
+    persistDatabase();
+    return res.json({
+      message: `Physical count reconciled. Delta of ${diff >= 0 ? `+${diff}` : diff} units recorded in ledger.`,
+      operation_reference: ref,
+      new_on_hand: count,
+    });
+  });
+
+  // --- 7. OPERATIONS LIFECYCLE (UNIFIED PIPELINE) ---
 
   app.get('/api/operations', (req: Request, res: Response) => {
     const user = getCurrentUser(req);
     const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
 
-    const { type, status, search } = req.query;
+    const { type, status, search, warehouse_id } = req.query;
     let list = [...DB.operations];
 
     // Floor operator scoping: only operations in their assigned warehouse or assigned to them
@@ -793,6 +1112,14 @@ async function startServer() {
       list = list.filter(
         (op) =>
           op.responsibleUserId === user.id ||
+          (op.destLocationId && whLocIds.includes(op.destLocationId)) ||
+          (op.sourceLocationId && whLocIds.includes(op.sourceLocationId))
+      );
+    } else if (warehouse_id) {
+      const whId = Number(warehouse_id);
+      const whLocIds = DB.locations.filter((l) => l.warehouseId === whId).map((l) => l.id);
+      list = list.filter(
+        (op) =>
           (op.destLocationId && whLocIds.includes(op.destLocationId)) ||
           (op.sourceLocationId && whLocIds.includes(op.sourceLocationId))
       );
@@ -885,7 +1212,37 @@ async function startServer() {
     };
 
     DB.operations.push(newOp);
+    persistDatabase();
     return res.json(formatOp(newOp));
+  });
+
+  // Edit draft operation
+  app.put('/api/operations/:id', (req: Request, res: Response) => {
+    const op = DB.operations.find((o) => o.id === Number(req.params.id));
+    if (!op) {
+      return res.status(404).json({ detail: 'Operation not found' });
+    }
+    if (op.status !== 'draft') {
+      return res.status(400).json({ detail: 'Only draft operations can be modified' });
+    }
+
+    const { contact, schedule_date, lines, source_location_id, dest_location_id } = req.body;
+    if (contact !== undefined) op.contact = contact.trim();
+    if (schedule_date !== undefined) op.scheduleDate = schedule_date;
+    if (source_location_id !== undefined) op.sourceLocationId = Number(source_location_id);
+    if (dest_location_id !== undefined) op.destLocationId = Number(dest_location_id);
+
+    if (lines && Array.isArray(lines)) {
+      op.lines = lines.map((l: any, idx: number) => ({
+        id: op.id * 100 + idx,
+        operationId: op.id,
+        productId: Number(l.product_id),
+        quantity: Number(l.quantity),
+      }));
+    }
+
+    persistDatabase();
+    return res.json(formatOp(op));
   });
 
   app.post('/api/operations/:id/mark-ready', (req: Request, res: Response) => {
@@ -911,17 +1268,17 @@ async function startServer() {
       }
       if (insufficient) {
         op.status = 'waiting';
+        persistDatabase();
         return res.json(formatOp(op));
       }
     }
 
     op.status = 'ready';
+    persistDatabase();
     return res.json(formatOp(op));
   });
 
-  // Operation Validation RBAC:
-  // - Both roles can validate
-  // - Floor Operator can ONLY validate operations already assigned to them or their assigned warehouse!
+  // Operation Validation: Atomic ledger execution
   app.post('/api/operations/:id/validate', (req: Request, res: Response) => {
     const user = getCurrentUser(req);
     const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
@@ -1006,10 +1363,11 @@ async function startServer() {
     }
 
     op.status = 'done';
+    persistDatabase();
     return res.json(formatOp(op));
   });
 
-  // Operation Cancel: Restricted to Inventory Manager
+  // Operation Cancellation (Manager only)
   app.post('/api/operations/:id/cancel', requireRole('inventory_manager'), (req: Request, res: Response) => {
     const op = DB.operations.find((o) => o.id === Number(req.params.id));
     if (!op) {
@@ -1019,10 +1377,26 @@ async function startServer() {
       return res.status(400).json({ detail: 'Cannot cancel an already completed operation' });
     }
     op.status = 'cancelled';
+    persistDatabase();
     return res.json(formatOp(op));
   });
 
-  // --- MOVE HISTORY AUDIT LEDGER (RBAC ENFORCED) ---
+  // Delete draft operation (Manager only)
+  app.delete('/api/operations/:id', requireRole('inventory_manager'), (req: Request, res: Response) => {
+    const idx = DB.operations.findIndex((o) => o.id === Number(req.params.id));
+    if (idx === -1) {
+      return res.status(404).json({ detail: 'Operation not found' });
+    }
+    if (DB.operations[idx].status !== 'draft') {
+      return res.status(400).json({ detail: 'Only draft operations can be permanently deleted' });
+    }
+    DB.operations.splice(idx, 1);
+    persistDatabase();
+    return res.json({ message: 'Draft operation deleted successfully' });
+  });
+
+  // --- 8. IMMUTABLE MOVE HISTORY AUDIT LEDGER ---
+
   app.get('/api/moves', (req: Request, res: Response) => {
     const user = getCurrentUser(req);
     const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
@@ -1092,7 +1466,8 @@ async function startServer() {
     return res.json(formatted);
   });
 
-  // --- DASHBOARD (ROLE-SCOPED PAYLOAD) ---
+  // --- 9. DASHBOARD METRICS & HISTORICAL MOVEMENTS ---
+
   app.get('/api/dashboard', (req: Request, res: Response) => {
     const user = getCurrentUser(req);
     const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
@@ -1207,7 +1582,8 @@ async function startServer() {
     }
   });
 
-  // --- SMART ALERTS (INVENTORY ANOMALIES & THRESHOLD BREACHES) ---
+  // --- 10. REAL-TIME SMART ALERTS (INVENTORY ANOMALIES & BREACHES) ---
+
   app.get('/api/smart-alerts', (req: Request, res: Response) => {
     const user = getCurrentUser(req);
     const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
@@ -1219,7 +1595,7 @@ async function startServer() {
         ? DB.locations.filter((l) => l.warehouseId === whId).map((l) => l.id)
         : null;
 
-    // Track active inbound receipts to know what's already being replenished
+    // Track active inbound receipts to identify replenishment in flight
     const activeReceipts = DB.operations.filter(
       (o) => o.type === 'receipt' && ['draft', 'waiting', 'ready'].includes(o.status)
     );
@@ -1304,7 +1680,7 @@ async function startServer() {
           inbound_in_progress: incomingInfo,
         });
       } else if (totalOnHand <= reorderPoint * 1.25) {
-        // Less than 25% buffer above reorder threshold
+        // Within 25% buffer of safety threshold
         alerts.push({
           id: `alert-buffer-${p.id}`,
           product_id: p.id,
@@ -1350,7 +1726,13 @@ async function startServer() {
     });
   });
 
-  // In development, mount Vite middleware
+  // Global Express Error Handler
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    console.error('Unhandled Server Error:', err);
+    res.status(500).json({ detail: err.message || 'Internal Server Error' });
+  });
+
+  // --- VITE & STATIC SPA FALLBACK ---
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -1358,12 +1740,21 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static('dist'));
+    const distPath = path.resolve(__dirname, 'dist');
+    app.use(express.static(distPath));
+
+    app.get('*', (req: Request, res: Response, next: NextFunction) => {
+      if (req.path.startsWith('/api')) {
+        return res.status(404).json({ detail: `API route not found: ${req.method} ${req.path}` });
+      }
+      res.sendFile(path.resolve(distPath, 'index.html'));
+    });
   }
 
   const port = process.env.PORT || 3000;
   app.listen(Number(port), '0.0.0.0', () => {
-    console.log(`StockSense Server running on http://0.0.0.0:${port}`);
+    console.log(`StockSense Industrial IMS Server running on http://0.0.0.0:${port}`);
+    console.log(`Local persistent database mounted at: ${DB_FILE}`);
   });
 }
 
