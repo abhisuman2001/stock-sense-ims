@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { Product, StockQuant, Category, Warehouse, Location, User, StockMove } from '../types';
 import { ProductSparkline } from './ProductSparkline';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
+import { ProductQrModal } from './ProductQrModal';
 import {
   Boxes,
   Plus,
@@ -16,6 +17,7 @@ import {
   Warehouse as WarehouseIcon,
   Barcode,
   Scan,
+  QrCode,
 } from 'lucide-react';
 
 interface ProductsScreenProps {
@@ -52,6 +54,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
   // New Product Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showScannerModal, setShowScannerModal] = useState(false);
+  const [qrModalProduct, setQrModalProduct] = useState<Product | null>(null);
   const [createSku, setCreateSku] = useState('');
   const [createName, setCreateName] = useState('');
   const [createCategoryId, setCreateCategoryId] = useState<string>('');
@@ -426,18 +429,19 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
                 <th className="py-3 px-4 font-medium">7-Day Trend</th>
                 <th className="py-3 px-4 font-medium text-right">Free to Use</th>
                 <th className="py-3 px-4 font-medium text-center">Status</th>
+                <th className="py-3 px-4 font-medium text-center">QR Tag</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#34312B]">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-[#8B8478] font-mono">
+                  <td colSpan={11} className="py-12 text-center text-[#8B8478] font-mono">
                     Reading product catalog records...
                   </td>
                 </tr>
               ) : products.filter(p => !showLowStockOnly || p.total_on_hand <= p.reorder_point).length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-[#8B8478]">
+                  <td colSpan={11} className="py-12 text-center text-[#8B8478]">
                     {showLowStockOnly ? 'No products currently below their reorder threshold.' : 'No products match the selected criteria.'}
                   </td>
                 </tr>
@@ -527,6 +531,18 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
                           </span>
                         )}
                       </td>
+
+                      {/* QR Code Bin Tag Generator Action */}
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          onClick={() => setQrModalProduct(p)}
+                          title={`Generate Warehouse QR Bin Tag for ${p.sku}`}
+                          className="p-1.5 bg-[#1A1816] hover:bg-[#34312B] border border-[#34312B] hover:border-[#F2C230] text-[#8B8478] hover:text-[#F2C230] transition-colors inline-flex items-center gap-1 font-mono text-[11px] cursor-pointer"
+                        >
+                          <QrCode className="w-3.5 h-3.5 text-[#F2C230]" />
+                          <span className="hidden sm:inline">QR Tag</span>
+                        </button>
+                      </td>
                     </tr>
                   );
                 })
@@ -589,13 +605,24 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
                           : 'hover:bg-[#2E2B26]'
                       }`}
                     >
-                      <td className="py-3 px-4 font-mono font-medium text-[#F2C230] flex items-center gap-2">
-                        {isLow && (
-                          <span title="Total stock under reorder threshold" className="text-[#E8A33D]">
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                          </span>
+                      <td className="py-3 px-4 font-mono font-medium text-[#F2C230] flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          {isLow && (
+                            <span title="Total stock under reorder threshold" className="text-[#E8A33D]">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                            </span>
+                          )}
+                          <span>{q.sku}</span>
+                        </div>
+                        {prod && (
+                          <button
+                            onClick={() => setQrModalProduct(prod)}
+                            title={`Generate QR Code for ${q.sku}`}
+                            className="p-1 text-[#8B8478] hover:text-[#F2C230] hover:bg-[#34312B] transition-colors rounded"
+                          >
+                            <QrCode className="w-3.5 h-3.5" />
+                          </button>
                         )}
-                        <span>{q.sku}</span>
                       </td>
                       <td className="py-3 px-4 font-medium text-[#F5F3EF]">
                         {q.product_name}
@@ -854,6 +881,12 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
           setFeedbackMsg(`Scanner: Located ${p.sku} (${p.name})`);
           setTimeout(() => setFeedbackMsg(null), 3500);
         }}
+      />
+
+      {/* Warehouse QR Code Bin Tag Modal */}
+      <ProductQrModal
+        product={qrModalProduct}
+        onClose={() => setQrModalProduct(null)}
       />
     </div>
   );
