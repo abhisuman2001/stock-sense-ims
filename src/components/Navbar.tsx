@@ -9,7 +9,6 @@ import {
   LogOut,
   ShieldCheck,
   HardHat,
-  ArrowLeftRight,
 } from 'lucide-react';
 
 export type MainNavTab = 'dashboard' | 'operations' | 'products' | 'moves' | 'settings';
@@ -25,7 +24,6 @@ interface NavbarProps {
   onSelectProductsSubTab: (sub: ProductsSubTab) => void;
   user: User | null;
   onLogout: () => void;
-  onSwitchRole?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -37,7 +35,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectProductsSubTab,
   user,
   onLogout,
-  onSwitchRole,
 }) => {
   const isManager =
     user?.role === 'inventory_manager' || (user?.role as any) === 'manager';
@@ -133,22 +130,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </nav>
 
-          {/* User Profile, Role Badge, and Fast Switcher */}
+          {/* User Profile, Role Badge */}
           <div className="flex items-center gap-3">
             {user ? (
               <div className="flex items-center gap-2.5">
-                {/* 1-Click Role Switcher for Hackathon Demo Convenience */}
-                {onSwitchRole && (
-                  <button
-                    onClick={onSwitchRole}
-                    title="Switch user demo role"
-                    className="hidden sm:flex items-center gap-1.5 px-2 py-1 text-[11px] font-mono border border-[#34312B] bg-[#1A1816] text-[#8B8478] hover:text-[#F2C230] hover:border-[#8B8478] transition-colors"
-                  >
-                    <ArrowLeftRight className="w-3 h-3 text-[#F2C230]" />
-                    <span>Switch to {isManager ? 'Floor Operator' : 'Manager'}</span>
-                  </button>
-                )}
-
                 {/* Visible Role Badge */}
                 <div className="text-right hidden sm:block">
                   <div className="text-xs font-semibold text-[#F5F3EF] leading-tight">

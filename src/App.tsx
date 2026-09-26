@@ -58,40 +58,6 @@ export default function App() {
     setCurrentTab('dashboard');
   };
 
-  // 1-Click Fast Role Switcher for Hackathon Demo
-  const handleSwitchRole = () => {
-    if (isManager) {
-      // Switch to Floor Operator
-      const opUser: User = {
-        id: 2,
-        email: 'staff@stocksense.io',
-        full_name: 'Alex Vance',
-        role: 'floor_operator',
-        assigned_warehouse_id: 1,
-        assigned_warehouse_code: 'WH',
-      };
-      localStorage.setItem('stocksense_token', `jwt_token_2_${Date.now()}`);
-      setStoredUser(opUser);
-      setCurrentUser(opUser);
-      setCurrentTab('dashboard');
-    } else {
-      // Switch to Inventory Manager
-      const mgrUser: User = {
-        id: 1,
-        email: 'demo@stocksense.io',
-        full_name: 'Sarah Connor',
-        role: 'inventory_manager',
-        assigned_warehouse_id: 1,
-        assigned_warehouse_code: 'WH',
-      };
-      localStorage.setItem('stocksense_token', `jwt_token_1_${Date.now()}`);
-      setStoredUser(mgrUser);
-      setCurrentUser(mgrUser);
-      setCurrentTab('dashboard');
-    }
-    setStockUpdateCounter((c) => c + 1);
-  };
-
   const navigateToOperations = (sub: OperationsSubTab) => {
     setOperationsSubTab(sub);
     setCurrentTab('operations');
@@ -137,7 +103,6 @@ export default function App() {
         onSelectProductsSubTab={setProductsSubTab}
         user={currentUser}
         onLogout={handleLogout}
-        onSwitchRole={handleSwitchRole}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
