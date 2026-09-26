@@ -172,3 +172,23 @@ html.light ::-webkit-scrollbar-thumb {
 html.light ::-webkit-scrollbar-thumb:hover {
   background: #CEC7B8;
 }
+
+/* Light mode branding overrides to prevent blending */
+html.light .stocksense-logo-text-stock {
+  color: #141312 !important;
+}
+
+html.light .stocksense-logo-text-sense {
+  color: #4F46E5 !important;
+}
+
+html.light .stocksense-logo-badge {
+  background-color: #E2DDD3 !important;
+  color: #38342D !important;
+  border-color: #C8C2B5 !important;
+}
+
+html.light .stocksense-logo-subtitle {
+  color: #5C5549 !important;
+}
+
