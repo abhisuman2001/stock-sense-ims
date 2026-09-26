@@ -1,0 +1,6 @@
+{
+  "name": "StockSense - Modular Inventory Management System",
+  "description": "Industrial modular inventory management system (IMS) with unified operations, stock move ledger, and real-time inventory tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

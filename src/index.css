@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --color-industrial-bg: #1A1816;
+  --color-industrial-nav: #201E1A;
+  --color-industrial-surface: #262420;
+  --color-industrial-surface-hover: #2E2B26;
+  --color-industrial-border: #34312B;
+  --color-industrial-border-light: #444038;
+  --color-industrial-text: #F5F3EF;
+  --color-industrial-muted: #8B8478;
+  --color-safety-yellow: #F2C230;
+  --color-safety-yellow-hover: #D9AD25;
+
+  --color-status-draft: #8B8478;
+  --color-status-waiting: #E8A33D;
+  --color-status-ready: #4A90D9;
+  --color-status-done: #5FA85D;
+  --color-status-cancelled: #D9534F;
+  --color-status-late: #D9534F;
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+body {
+  background-color: var(--color-industrial-bg);
+  color: var(--color-industrial-text);
+  font-family: var(--font-sans);
+  margin: 0;
+  padding: 0;
+}
+
+/* Tabular nums and monospace for codes, quantities, SKUs */
+.code-mono, .sku-mono, .qty-num {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+}
+
+/* Custom scrollbars matching industrial theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1A1816;
+}
+::-webkit-scrollbar-thumb {
+  background: #34312B;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #444038;
+}
