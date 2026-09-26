@@ -36,6 +36,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('');
+  const [showLowStockOnly, setShowLowStockOnly] = useState(false);
 
   // Inline Stock Editing state: { key: `${productId}_${locationId}`, value: number }
   const [editingQuantKey, setEditingQuantKey] = useState<string | null>(null);
@@ -206,6 +207,40 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
         </div>
       )}
 
+      {/* Low Stock Warning Banner when items breached reorder point */}
+      {(() => {
+        const lowProducts = products.filter((p) => p.total_on_hand <= p.reorder_point);
+        if (lowProducts.length === 0) return null;
+        return (
+          <div className="bg-[#2A2016] border-l-4 border-[#E8A33D] border-t border-r border-b border-[rgba(232,163,61,0.3)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-[rgba(232,163,61,0.15)] text-[#E8A33D]">
+                <AlertTriangle className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="text-xs font-mono font-bold uppercase tracking-wider text-[#E8A33D] flex items-center gap-2">
+                  <span>CRITICAL STOCK WARNING: {lowProducts.length} {lowProducts.length === 1 ? 'ITEM' : 'ITEMS'} BELOW REORDER POINT</span>
+                </div>
+                <div className="text-xs text-[#C8C2B7] mt-0.5">
+                  The physical inventory level for {lowProducts.map(p => p.sku).slice(0, 3).join(', ')}{lowProducts.length > 3 ? ` and ${lowProducts.length - 3} more` : ''} has breached safety threshold levels.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowLowStockOnly(!showLowStockOnly)}
+              className={`px-3 py-1.5 text-xs font-mono font-semibold border transition-colors flex items-center gap-1.5 self-start sm:self-center ${
+                showLowStockOnly
+                  ? 'bg-[#E8A33D] text-[#1A1816] border-[#E8A33D]'
+                  : 'bg-[#1A1816] text-[#E8A33D] border-[#E8A33D] hover:bg-[rgba(232,163,61,0.15)]'
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>{showLowStockOnly ? 'Show All Products' : 'Filter Critical Low Stock'}</span>
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#262420] border border-[#34312B] p-3">
         <form onSubmit={handleSearchSubmit} className="flex-1 relative flex items-center">
@@ -220,6 +255,20 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
         </form>
 
         <div className="flex items-center gap-2">
+          {/* Quick Low Stock Toggle */}
+          <button
+            onClick={() => setShowLowStockOnly(!showLowStockOnly)}
+            title="Filter by low stock"
+            className={`px-2.5 py-1.5 text-xs font-mono flex items-center gap-1.5 border transition-colors ${
+              showLowStockOnly
+                ? 'bg-[#E8A33D] text-[#1A1816] border-[#E8A33D] font-semibold'
+                : 'bg-[#1A1816] text-[#8B8478] border-[#34312B] hover:text-[#E8A33D] hover:border-[#E8A33D]'
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Low Stock</span>
+          </button>
+
           {subTab === 'catalog' ? (
             <select
               value={selectedCategory}
@@ -297,19 +346,37 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
                     Reading product catalog records...
                   </td>
                 </tr>
-              ) : products.length === 0 ? (
+              ) : products.filter(p => !showLowStockOnly || p.total_on_hand <= p.reorder_point).length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-[#8B8478]">
-                    No products match the selected criteria.
+                    {showLowStockOnly ? 'No products currently below their reorder threshold.' : 'No products match the selected criteria.'}
                   </td>
                 </tr>
               ) : (
-                products.map((p) => {
+                products
+                  .filter(p => !showLowStockOnly || p.total_on_hand <= p.reorder_point)
+                  .map((p) => {
                   const isLow = p.total_on_hand <= p.reorder_point;
+                  const isCritical = p.total_on_hand === 0 || p.total_on_hand < (p.reorder_point * 0.5);
                   return (
-                    <tr key={p.id} className="hover:bg-[#2E2B26] transition-colors h-12">
-                      <td className="py-3 px-4 font-mono font-medium text-[#F2C230]">
-                        {p.sku}
+                    <tr
+                      key={p.id}
+                      className={`transition-colors h-12 ${
+                        isLow
+                          ? 'bg-[rgba(232,163,61,0.06)] hover:bg-[rgba(232,163,61,0.12)] border-l-2 border-l-[#E8A33D]'
+                          : 'hover:bg-[#2E2B26]'
+                      }`}
+                    >
+                      <td className="py-3 px-4 font-mono font-medium text-[#F2C230] flex items-center gap-2">
+                        {isLow && (
+                          <span
+                            title={isCritical ? 'Critical Stock Breach (Out of Stock or Under 50% Threshold)' : 'Under Reorder Threshold'}
+                            className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[rgba(232,163,61,0.2)] text-[#E8A33D]"
+                          >
+                            <AlertTriangle className={`w-3 h-3 ${isCritical ? 'animate-pulse text-[#D9534F]' : 'text-[#E8A33D]'}`} />
+                          </span>
+                        )}
+                        <span>{p.sku}</span>
                       </td>
                       <td className="py-3 px-4 font-medium text-[#F5F3EF]">
                         {p.name}
@@ -328,21 +395,36 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
                       <td className="py-3 px-4 font-mono tabular-nums text-right text-[#8B8478]">
                         {p.reorder_point.toFixed(1)}
                       </td>
-                      <td className="py-3 px-4 font-mono tabular-nums text-right font-medium text-[#F5F3EF]">
-                        {p.total_on_hand.toFixed(1)}
+                      <td className={`py-3 px-4 font-mono tabular-nums text-right font-medium ${
+                        isLow ? 'text-[#E8A33D] font-bold' : 'text-[#F5F3EF]'
+                      }`}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {isLow && (
+                            <span className="text-[10px] px-1 py-0.2 rounded bg-[rgba(232,163,61,0.2)] text-[#E8A33D] font-mono">
+                              ▼
+                            </span>
+                          )}
+                          <span>{p.total_on_hand.toFixed(1)}</span>
+                        </div>
                       </td>
-                      <td className="py-3 px-4 font-mono tabular-nums text-right font-medium text-[#F5F3EF]">
+                      <td className={`py-3 px-4 font-mono tabular-nums text-right font-medium ${
+                        isLow ? 'text-[#E8A33D]' : 'text-[#F5F3EF]'
+                      }`}>
                         {p.total_free_to_use.toFixed(1)}
                       </td>
                       <td className="py-3 px-4 text-center">
                         {isLow ? (
-                          <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase font-semibold px-2 py-0.5 border border-[#E8A33D] text-[#E8A33D] bg-[rgba(232,163,61,0.12)]">
+                          <span className={`inline-flex items-center gap-1 font-mono text-[10px] uppercase font-semibold px-2 py-0.5 border ${
+                            isCritical
+                              ? 'border-[#D9534F] text-[#D9534F] bg-[rgba(217,83,79,0.15)] animate-pulse'
+                              : 'border-[#E8A33D] text-[#E8A33D] bg-[rgba(232,163,61,0.15)]'
+                          }`}>
                             <AlertTriangle className="w-3 h-3" />
-                            LOW STOCK
+                            {isCritical ? 'CRITICAL LOW' : 'LOW STOCK'}
                           </span>
                         ) : (
-                          <span className="font-mono text-[10px] uppercase font-semibold text-[#8B8478]">
-                            NORMAL
+                          <span className="font-mono text-[10px] uppercase font-semibold text-[#5FA85D] bg-[rgba(95,168,93,0.1)] px-2 py-0.5 border border-[rgba(95,168,93,0.3)]">
+                            IN STOCK
                           </span>
                         )}
                       </td>
@@ -387,14 +469,34 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
                   </td>
                 </tr>
               ) : (
-                stockQuants.map((q) => {
+                stockQuants
+                  .filter((q) => {
+                    if (!showLowStockOnly) return true;
+                    const prod = products.find((p) => p.id === q.product_id);
+                    return prod ? prod.total_on_hand <= prod.reorder_point : false;
+                  })
+                  .map((q) => {
                   const key = `${q.product_id}_${q.location_id}`;
                   const isEditing = editingQuantKey === key;
+                  const prod = products.find((p) => p.id === q.product_id);
+                  const isLow = prod ? prod.total_on_hand <= prod.reorder_point : false;
 
                   return (
-                    <tr key={key} className="hover:bg-[#2E2B26] transition-colors h-12">
-                      <td className="py-3 px-4 font-mono font-medium text-[#F2C230]">
-                        {q.sku}
+                    <tr
+                      key={key}
+                      className={`transition-colors h-12 ${
+                        isLow
+                          ? 'bg-[rgba(232,163,61,0.06)] hover:bg-[rgba(232,163,61,0.12)] border-l-2 border-l-[#E8A33D]'
+                          : 'hover:bg-[#2E2B26]'
+                      }`}
+                    >
+                      <td className="py-3 px-4 font-mono font-medium text-[#F2C230] flex items-center gap-2">
+                        {isLow && (
+                          <span title="Total stock under reorder threshold" className="text-[#E8A33D]">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                        <span>{q.sku}</span>
                       </td>
                       <td className="py-3 px-4 font-medium text-[#F5F3EF]">
                         {q.product_name}
