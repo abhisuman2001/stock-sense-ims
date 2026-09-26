@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Warehouse, Location, User } from '../types';
+import { useTheme } from '../context/ThemeContext';
 import {
   Building2,
   MapPin,
@@ -11,6 +12,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Database,
+  Sun,
+  Moon,
+  Paintbrush,
 } from 'lucide-react';
 
 interface SettingsScreenProps {
@@ -18,6 +22,7 @@ interface SettingsScreenProps {
 }
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({ currentUser }) => {
+  const { theme, setTheme } = useTheme();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
@@ -207,6 +212,85 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ currentUser }) =
             </div>
           );
         })}
+      </div>
+
+      {/* Appearance & Theme Configuration Box */}
+      <div className="bg-[#262420] border border-[#34312B] p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Paintbrush className="w-4 h-4 text-[#F2C230]" />
+          <h3 className="text-xs font-mono uppercase tracking-wider text-[#F5F3EF] font-bold">
+            Appearance & Visual Theme
+          </h3>
+        </div>
+        <p className="text-xs text-[#8B8478] mb-4">
+          Select your terminal display profile. Off-white light mode utilizes warm alabaster tones (#F4F1EA) to prevent optical eye strain in bright warehouse daylight, while dark mode provides high-contrast industrial ergonomics.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+          {/* Dark Mode Option */}
+          <div
+            onClick={() => setTheme('dark')}
+            className={`p-4 border cursor-pointer transition-all ${
+              theme === 'dark'
+                ? 'border-[#F2C230] bg-[#1A1816] shadow-sm'
+                : 'border-[#34312B] bg-[#1A1816]/50 hover:border-[#8B8478]'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Moon className="w-4 h-4 text-[#F2C230]" />
+                <span className="text-xs font-mono font-bold text-[#F5F3EF]">INDUSTRIAL DARK</span>
+              </div>
+              {theme === 'dark' && (
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-[#F2C230] text-[#1A1816]">
+                  ACTIVE
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 mt-2">
+              <div className="w-4 h-4 bg-[#1A1816] border border-[#34312B] rounded-xs" title="Canvas #1A1816" />
+              <div className="w-4 h-4 bg-[#262420] border border-[#34312B] rounded-xs" title="Surface #262420" />
+              <div className="w-4 h-4 bg-[#F2C230] rounded-xs" title="Accent #F2C230" />
+              <div className="w-4 h-4 bg-[#5FA85D] rounded-xs" title="Status Done #5FA85D" />
+            </div>
+            <p className="text-[11px] text-[#8B8478] mt-2 font-mono">
+              Deep asphalt charcoal & safety amber
+            </p>
+          </div>
+
+          {/* Off-White Light Mode Option */}
+          <div
+            onClick={() => setTheme('light')}
+            className={`p-4 border cursor-pointer transition-all ${
+              theme === 'light'
+                ? 'border-[#B47805] bg-[#F4F1EA] text-[#1F1C18] shadow-sm'
+                : 'border-[#34312B] bg-[#1A1816]/50 hover:border-[#8B8478]'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Sun className="w-4 h-4 text-[#D97706]" />
+                <span className={`text-xs font-mono font-bold ${theme === 'light' ? 'text-[#1F1C18]' : 'text-[#F5F3EF]'}`}>
+                  OFF-WHITE LIGHT
+                </span>
+              </div>
+              {theme === 'light' && (
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-[#B47805] text-white">
+                  ACTIVE
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 mt-2">
+              <div className="w-4 h-4 bg-[#F4F1EA] border border-[#D8D2C5] rounded-xs" title="Canvas #F4F1EA (Alabaster Off-white)" />
+              <div className="w-4 h-4 bg-[#FDFCFA] border border-[#D8D2C5] rounded-xs" title="Surface #FDFCFA" />
+              <div className="w-4 h-4 bg-[#B47805] rounded-xs" title="Warm Amber #B47805" />
+              <div className="w-4 h-4 bg-[#3E803C] rounded-xs" title="Status Done #3E803C" />
+            </div>
+            <p className={`text-[11px] mt-2 font-mono ${theme === 'light' ? 'text-[#686257]' : 'text-[#8B8478]'}`}>
+              Warm alabaster off-white & charcoal
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Operator Session & System Info Box */}

@@ -23,12 +23,122 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+/* =========================================================================
+   LIGHT / OFF-WHITE THEME OVERRIDES
+   Industrial warm off-white palette:
+   - Primary Canvas: #F4F1EA (Alabaster / Off-white, soft on eyes)
+   - Navigation & Header: #EAE6DF
+   - Cards, Tables & Panels: #FDFCFA
+   - Sub-panels & Inputs: #EFECE6
+   - Borders: #D8D2C5 / #CEC7B8
+   - Typography: #1F1C18 (Deep charcoal / espresso) & #686257 (Warm muted)
+   - Amber / Safety Accent: #B47805 / #CA8A04
+   ========================================================================= */
+
+html.light body {
+  background-color: #F4F1EA !important;
+  color: #1F1C18 !important;
+}
+
 body {
-  background-color: var(--color-industrial-bg);
-  color: var(--color-industrial-text);
+  background-color: #1A1816;
+  color: #F5F3EF;
   font-family: var(--font-sans);
   margin: 0;
   padding: 0;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* In Light Mode: remap industrial dark container colors to clean off-white variants */
+html.light .bg-\[\#1A1816\] {
+  background-color: #F4F1EA !important;
+}
+
+html.light .bg-\[\#201E1A\] {
+  background-color: #EAE6DF !important;
+}
+
+html.light .bg-\[\#262420\] {
+  background-color: #FDFCFA !important;
+}
+
+html.light .bg-\[\#1F1D1A\] {
+  background-color: #EBE7E0 !important;
+}
+
+html.light .bg-\[\#121110\] {
+  background-color: #EDE9E1 !important;
+}
+
+html.light .bg-\[\#2E2B26\] {
+  background-color: #EFEBE3 !important;
+}
+
+html.light .hover\:bg-\[\#2E2B26\]:hover {
+  background-color: #EAE5DC !important;
+}
+
+html.light .hover\:bg-\[\#34312B\]:hover {
+  background-color: #E4DFD5 !important;
+}
+
+html.light .border-\[\#34312B\] {
+  border-color: #D8D2C5 !important;
+}
+
+html.light .border-\[\#444038\] {
+  border-color: #CEC7B8 !important;
+}
+
+html.light .divide-\[\#34312B\] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #D8D2C5 !important;
+}
+
+/* Typography remap in light mode */
+html.light .text-\[\#F5F3EF\] {
+  color: #1F1C18 !important;
+}
+
+html.light .text-\[\#C8C2B7\] {
+  color: #4D473E !important;
+}
+
+html.light .text-\[\#8B8478\] {
+  color: #686257 !important;
+}
+
+html.light .text-\[\#5B554D\] {
+  color: #8C8476 !important;
+}
+
+html.light .hover\:text-\[\#F5F3EF\]:hover {
+  color: #0E0C0A !important;
+}
+
+/* Accent yellow contrast adjustments in light mode for readability */
+html.light .text-\[\#F2C230\] {
+  color: #B47805 !important;
+}
+
+html.light .border-\[\#F2C230\] {
+  border-color: #CA8A04 !important;
+}
+
+/* Warnings and highlights */
+html.light .bg-\[\#2A2016\] {
+  background-color: #FEF3C7 !important;
+}
+
+/* Inputs and interactive elements in light mode */
+html.light input,
+html.light select,
+html.light textarea {
+  color: #1F1C18 !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #8C8476 !important;
 }
 
 /* Tabular nums and monospace for codes, quantities, SKUs */
@@ -37,7 +147,7 @@ body {
   font-feature-settings: "tnum" 1;
 }
 
-/* Custom scrollbars matching industrial theme */
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -51,4 +161,14 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #444038;
+}
+
+html.light ::-webkit-scrollbar-track {
+  background: #F4F1EA;
+}
+html.light ::-webkit-scrollbar-thumb {
+  background: #D8D2C5;
+}
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #CEC7B8;
 }

@@ -1,5 +1,6 @@
 import React from 'react';
 import { User } from '../types';
+import { ThemeToggle } from './ThemeToggle';
 import {
   LayoutDashboard,
   ArrowDownToLine,
@@ -130,8 +131,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </nav>
 
-          {/* User Profile, Role Badge */}
+          {/* User Profile, Theme Toggle & Role Badge */}
           <div className="flex items-center gap-3">
+            {/* Dark / Light Mode Toggler */}
+            <ThemeToggle />
+
             {user ? (
               <div className="flex items-center gap-2.5">
                 {/* Visible Role Badge */}
