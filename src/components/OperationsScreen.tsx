@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { printHtmlViaIframe, generateOperationDocumentHtml } from '../lib/printUtils';
+import { downloadOperationPdf } from '../lib/pdfGenerator';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -21,6 +22,7 @@ import {
   Filter,
   RefreshCw,
   Printer,
+  FileDown,
   CheckCircle2,
   XCircle,
   X,
@@ -521,17 +523,28 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
+                    downloadOperationPdf(activeOp, currentUser?.full_name || 'Staff');
+                    setActionSuccessMsg(`Downloaded official document: StockSense_${activeOp.reference}_Document.pdf`);
+                    setTimeout(() => setActionSuccessMsg(null), 3500);
+                  }}
+                  title="Directly download official warehouse document as a PDF file"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-[#34312B] bg-[#1A1816] hover:border-[#F2C230] text-[#F5F3EF] hover:text-[#F2C230] text-xs font-mono transition-colors cursor-pointer"
+                >
+                  <FileDown className="w-4 h-4 text-[#F2C230]" />
+                  <span>Download PDF</span>
+                </button>
+                <button
+                  onClick={() => {
                     const html = generateOperationDocumentHtml(
                       activeOp,
                       currentUser?.full_name || 'Staff'
                     );
                     printHtmlViaIframe(`StockSense_${activeOp.reference}_Document`, html);
                   }}
-                  title="Print or Save Document as PDF"
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-[#34312B] bg-[#1A1816] hover:border-[#F2C230] text-[#F5F3EF] hover:text-[#F2C230] text-xs font-mono transition-colors cursor-pointer"
+                  title="Print Slip"
+                  className="p-1.5 border border-[#34312B] bg-[#1A1816] text-[#8B8478] hover:text-[#F5F3EF] hover:border-[#8B8478] text-xs font-mono transition-colors cursor-pointer"
                 >
-                  <Printer className="w-4 h-4 text-[#F2C230]" />
-                  <span>Print / PDF</span>
+                  <Printer className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setActiveOp(null)}
@@ -659,17 +672,15 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    const html = generateOperationDocumentHtml(
-                      activeOp,
-                      currentUser?.full_name || 'Staff'
-                    );
-                    printHtmlViaIframe(`StockSense_${activeOp.reference}_Document`, html);
+                    downloadOperationPdf(activeOp, currentUser?.full_name || 'Staff');
+                    setActionSuccessMsg(`Downloaded official document: StockSense_${activeOp.reference}_Document.pdf`);
+                    setTimeout(() => setActionSuccessMsg(null), 3500);
                   }}
                   className="px-3 py-2 border border-[#34312B] bg-[#1A1816] text-[#F5F3EF] hover:border-[#F2C230] text-xs font-mono flex items-center gap-1.5 cursor-pointer"
-                  title="Print or Save Official Warehouse Document as PDF"
+                  title="Directly download official warehouse document as a PDF file"
                 >
-                  <Printer className="w-3.5 h-3.5 text-[#F2C230]" />
-                  <span>Print Document (PDF)</span>
+                  <FileDown className="w-3.5 h-3.5 text-[#F2C230]" />
+                  <span>Download PDF</span>
                 </button>
 
                 {activeOp.status === 'draft' && (
@@ -941,6 +952,18 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  downloadOperationPdf(activeOp, currentUser?.full_name || 'Staff');
+                  setActionSuccessMsg(`Downloaded official document: StockSense_${activeOp.reference}_Document.pdf`);
+                  setTimeout(() => setActionSuccessMsg(null), 3500);
+                }}
+                className="px-4 py-2 bg-[#F2C230] hover:bg-[#D9AD25] text-[#1A1816] text-xs font-bold font-mono flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                <span>Download PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   const html = generateOperationDocumentHtml(
                     activeOp,
                     currentUser?.full_name || 'Staff'
@@ -950,7 +973,7 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
                 className="px-4 py-2 bg-black hover:bg-neutral-800 text-white text-xs font-bold font-mono flex items-center gap-1.5 cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>Print / Save as PDF</span>
+                <span>Print</span>
               </button>
               <button
                 type="button"

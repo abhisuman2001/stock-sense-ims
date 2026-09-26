@@ -20,8 +20,10 @@ import {
   QrCode,
   Download,
   Printer,
+  FileDown,
 } from 'lucide-react';
 import { printHtmlViaIframe, generateCatalogReportHtml } from '../lib/printUtils';
+import { downloadCatalogPdf } from '../lib/pdfGenerator';
 
 interface ProductsScreenProps {
   subTab: 'catalog' | 'stock';
@@ -364,6 +366,62 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
     }
   };
 
+  const handleDownloadPdf = () => {
+    try {
+      const activeProducts = products.filter(
+        (p) => !showLowStockOnly || p.total_on_hand <= p.reorder_point
+      );
+
+      if (subTab === 'catalog' && activeProducts.length === 0) {
+        setError('No catalog items available to download with current filters.');
+        setTimeout(() => setError(null), 3000);
+        return;
+      }
+
+      if (subTab === 'stock' && stockQuants.length === 0) {
+        setError('No stock ledger records available to download.');
+        setTimeout(() => setError(null), 3000);
+        return;
+      }
+
+      const filterParts: string[] = [];
+      if (selectedCategory) {
+        const cat = categories.find((c) => String(c.id) === selectedCategory);
+        filterParts.push(`Category: ${cat?.name || selectedCategory}`);
+      }
+      if (selectedWarehouse) {
+        const wh = warehouses.find((w) => String(w.id) === selectedWarehouse);
+        filterParts.push(`Warehouse: [${wh?.short_code || ''}] ${wh?.name || selectedWarehouse}`);
+      }
+      if (search) {
+        filterParts.push(`Search: "${search}"`);
+      }
+      if (showLowStockOnly) {
+        filterParts.push('Filter: Low / Critical Stock Breaches');
+      }
+
+      const scopeText = filterParts.length > 0 ? filterParts.join(' | ') : 'All Catalog Records';
+
+      downloadCatalogPdf(
+        subTab,
+        activeProducts,
+        stockQuants,
+        currentUser?.full_name || 'Sarah Connor',
+        scopeText
+      );
+
+      setFeedbackMsg(
+        subTab === 'catalog'
+          ? `Downloaded official Inventory Catalog PDF (${activeProducts.length} items).`
+          : `Downloaded official Stock Ledger PDF (${stockQuants.length} location records).`
+      );
+      setTimeout(() => setFeedbackMsg(null), 4000);
+    } catch (err: any) {
+      setError('Failed to download PDF report: ' + (err.message || 'Unknown error'));
+      setTimeout(() => setError(null), 4000);
+    }
+  };
+
   const handlePrintPdf = () => {
     try {
       const activeProducts = products.filter(
@@ -415,10 +473,10 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
         html
       );
 
-      setFeedbackMsg('Print preview dispatched — select "Save as PDF" in the print destination menu.');
+      setFeedbackMsg('Print preview dispatched — select destination printer or PDF in the dialog.');
       setTimeout(() => setFeedbackMsg(null), 4000);
     } catch (err: any) {
-      setError('Failed to initiate print/PDF export: ' + (err.message || 'Unknown error'));
+      setError('Failed to initiate print: ' + (err.message || 'Unknown error'));
       setTimeout(() => setError(null), 4000);
     }
   };
@@ -463,21 +521,32 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
               title={subTab === 'catalog' ? 'Export current inventory catalog to CSV for reporting' : 'Export physical stock ledger to CSV for reporting'}
             >
               <Download className="w-4 h-4 text-[#F2C230]" />
-              <span className="hidden sm:inline">Export to CSV</span>
+              <span className="hidden sm:inline">Export CSV</span>
               <span className="sm:hidden">CSV</span>
             </button>
           )}
 
-          {/* Print / Save as PDF Button */}
+          {/* Download PDF Document Button */}
+          {isManager && (
+            <button
+              onClick={handleDownloadPdf}
+              className="bg-[#262420] hover:bg-[#34312B] border border-[#34312B] hover:border-[#F2C230] text-[#F5F3EF] hover:text-[#F2C230] text-xs font-mono font-medium py-2 px-3 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title={subTab === 'catalog' ? 'Download official Inventory Catalog as PDF file' : 'Download physical Stock Ledger Audit as PDF file'}
+            >
+              <FileDown className="w-4 h-4 text-[#F2C230]" />
+              <span className="hidden sm:inline">Download PDF</span>
+              <span className="sm:hidden">PDF</span>
+            </button>
+          )}
+
+          {/* Print Report Button */}
           {isManager && (
             <button
               onClick={handlePrintPdf}
-              className="bg-[#262420] hover:bg-[#34312B] border border-[#34312B] hover:border-[#F2C230] text-[#F5F3EF] hover:text-[#F2C230] text-xs font-mono font-medium py-2 px-3 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
-              title={subTab === 'catalog' ? 'Print or Save Official Catalog Report as PDF' : 'Print or Save Physical Stock Ledger Audit as PDF'}
+              className="bg-[#262420] hover:bg-[#34312B] border border-[#34312B] hover:border-[#8B8478] text-[#8B8478] hover:text-[#F5F3EF] text-xs font-mono font-medium p-2 transition-colors flex items-center justify-center cursor-pointer shadow-sm"
+              title={subTab === 'catalog' ? 'Print official catalog document' : 'Print stock ledger audit slip'}
             >
-              <Printer className="w-4 h-4 text-[#F2C230]" />
-              <span className="hidden sm:inline">Print / PDF</span>
-              <span className="sm:hidden">PDF</span>
+              <Printer className="w-4 h-4" />
             </button>
           )}
 

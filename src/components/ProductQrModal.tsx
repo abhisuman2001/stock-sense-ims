@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Product } from '../types';
 import { QrCode, X, Printer, Download, Check, ExternalLink } from 'lucide-react';
+import { printHtmlViaIframe } from '../lib/printUtils';
 
 interface ProductQrModalProps {
   product: Product | null;
@@ -24,10 +25,7 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({ product, onClose
   });
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    printWindow.document.write(`
+    const html = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -78,16 +76,10 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({ product, onClose
               <span>Reorder: ${product.reorder_point}</span>
             </div>
           </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              window.close();
-            };
-          </script>
         </body>
       </html>
-    `);
-    printWindow.document.close();
+    `;
+    printHtmlViaIframe(`QR_Bin_Tag_${product.sku}`, html);
   };
 
   const handleDownloadSvg = () => {
