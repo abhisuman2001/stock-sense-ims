@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../lib/api';
-import { Product, StockQuant, Category, Warehouse, Location, User } from '../types';
+import { Product, StockQuant, Category, Warehouse, Location, User, StockMove } from '../types';
+import { ProductSparkline } from './ProductSparkline';
 import {
   Boxes,
   Plus,
@@ -28,6 +29,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
   const [categories, setCategories] = useState<Category[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [recentMoves, setRecentMoves] = useState<StockMove[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
     setLoading(true);
     setError(null);
     try {
-      const [prods, cats, whs, locs, stks] = await Promise.all([
+      const [prods, cats, whs, locs, stks, moves] = await Promise.all([
         api.getProducts({
           category_id: selectedCategory ? Number(selectedCategory) : undefined,
           search: search || undefined,
@@ -69,17 +71,68 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
         api.getWarehouses(),
         api.getLocations(),
         api.getStock(selectedWarehouse ? Number(selectedWarehouse) : undefined),
+        api.getMoves(),
       ]);
       setProducts(prods);
       setCategories(cats);
       setWarehouses(whs);
       setLocations(locs);
       setStockQuants(stks);
+      setRecentMoves(moves || []);
     } catch (err: any) {
       setError(err.message || 'Failed to load product data');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Build real 7-day sparkline history point series for a given product
+  const getProduct7DayData = (product: Product) => {
+    // Generate label for each of the last 7 days
+    const now = new Date();
+    const days: { dateStr: string; label: string; timestamp: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 86400000);
+      const dateStr = d.toISOString().split('T')[0];
+      const label = d.toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
+      days.push({ dateStr, label, timestamp: d.setHours(23, 59, 59, 999) });
+    }
+
+    // Product moves sorted chronologically
+    const pMoves = recentMoves.filter((m) => m.product_id === product.id);
+
+    // Compute cumulative delta working backward from current total_on_hand
+    // For each day, on-hand at end of day = current - (sum of moves that occurred AFTER that day)
+    const points = days.map((day, idx) => {
+      if (idx === days.length - 1) {
+        // Today's quantity is the current on_hand
+        return { day: 'Today', qty: Math.max(0, product.total_on_hand) };
+      }
+
+      // Moves that occurred after this day's end
+      const movesAfterDay = pMoves.filter(
+        (m) => new Date(m.moved_at).getTime() > day.timestamp
+      );
+
+      // If a move was a receipt (+), it added stock, so before this move stock was lower
+      // If a move was a delivery (-), it deducted stock, so before this move stock was higher
+      let netDeltaAfter = 0;
+      for (const m of movesAfterDay) {
+        if (m.operation_type === 'receipt') {
+          netDeltaAfter += m.quantity;
+        } else if (m.operation_type === 'delivery') {
+          netDeltaAfter -= m.quantity;
+        } else if (m.operation_type === 'adjustment') {
+          // Adjustments typically move into scrap or hold
+          netDeltaAfter -= m.quantity;
+        }
+      }
+
+      const historicalQty = Math.max(0, product.total_on_hand - netDeltaAfter);
+      return { day: day.label, qty: historicalQty };
+    });
+
+    return points;
   };
 
   useEffect(() => {
@@ -335,6 +388,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
                 <th className="py-3 px-4 font-medium text-right">Unit Cost</th>
                 <th className="py-3 px-4 font-medium text-right">Reorder Pt</th>
                 <th className="py-3 px-4 font-medium text-right">Total On Hand</th>
+                <th className="py-3 px-4 font-medium">7-Day Trend</th>
                 <th className="py-3 px-4 font-medium text-right">Free to Use</th>
                 <th className="py-3 px-4 font-medium text-center">Status</th>
               </tr>
@@ -342,13 +396,13 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
             <tbody className="divide-y divide-[#34312B]">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-[#8B8478] font-mono">
+                  <td colSpan={10} className="py-12 text-center text-[#8B8478] font-mono">
                     Reading product catalog records...
                   </td>
                 </tr>
               ) : products.filter(p => !showLowStockOnly || p.total_on_hand <= p.reorder_point).length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-[#8B8478]">
+                  <td colSpan={10} className="py-12 text-center text-[#8B8478]">
                     {showLowStockOnly ? 'No products currently below their reorder threshold.' : 'No products match the selected criteria.'}
                   </td>
                 </tr>
@@ -407,6 +461,16 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
                           <span>{p.total_on_hand.toFixed(1)}</span>
                         </div>
                       </td>
+
+                      {/* 7-Day Quantity Change Sparkline */}
+                      <td className="py-2 px-4">
+                        <ProductSparkline
+                          data={getProduct7DayData(p)}
+                          isLow={isLow}
+                          uom={p.uom}
+                        />
+                      </td>
+
                       <td className={`py-3 px-4 font-mono tabular-nums text-right font-medium ${
                         isLow ? 'text-[#E8A33D]' : 'text-[#F5F3EF]'
                       }`}>
