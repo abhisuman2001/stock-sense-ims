@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../lib/api';
 import { Product, StockQuant, Category, Warehouse, Location, User, StockMove } from '../types';
 import { ProductSparkline } from './ProductSparkline';
+import { BarcodeScannerModal } from './BarcodeScannerModal';
 import {
   Boxes,
   Plus,
@@ -13,6 +14,8 @@ import {
   Check,
   X,
   Warehouse as WarehouseIcon,
+  Barcode,
+  Scan,
 } from 'lucide-react';
 
 interface ProductsScreenProps {
@@ -48,6 +51,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
 
   // New Product Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showScannerModal, setShowScannerModal] = useState(false);
   const [createSku, setCreateSku] = useState('');
   const [createName, setCreateName] = useState('');
   const [createCategoryId, setCreateCategoryId] = useState<string>('');
@@ -137,7 +141,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
 
   useEffect(() => {
     loadData();
-  }, [selectedCategory, selectedWarehouse]);
+  }, [selectedCategory, selectedWarehouse, search]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -229,6 +233,17 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Barcode / SKU Scanner Trigger Button */}
+          <button
+            onClick={() => setShowScannerModal(true)}
+            className="bg-[#262420] hover:bg-[#34312B] border border-[#F2C230]/50 hover:border-[#F2C230] text-[#F2C230] text-xs font-mono font-medium py-2 px-3 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+            title="Open Optical Barcode & SKU Scanner"
+          >
+            <Scan className="w-4 h-4 text-[#F2C230] animate-pulse" />
+            <span className="hidden sm:inline">Scan Barcode / SKU</span>
+            <span className="sm:hidden">Scan</span>
+          </button>
+
           <button
             onClick={loadData}
             title="Refresh"
@@ -303,8 +318,28 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by SKU or item description (Press Enter)..."
-            className="w-full bg-[#1A1816] border border-[#34312B] pl-9 pr-3 py-1.5 text-xs text-[#F5F3EF] focus:outline-none focus:border-[#F2C230] font-mono"
+            className="w-full bg-[#1A1816] border border-[#34312B] pl-9 pr-16 py-1.5 text-xs text-[#F5F3EF] focus:outline-none focus:border-[#F2C230] font-mono"
           />
+          <div className="absolute right-2 flex items-center gap-1">
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                title="Clear search"
+                className="p-1 text-[#8B8478] hover:text-[#F5F3EF] transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowScannerModal(true)}
+              title="Scan physical barcode or SKU"
+              className="p-1 text-[#8B8478] hover:text-[#F2C230] transition-colors"
+            >
+              <Barcode className="w-4 h-4" />
+            </button>
+          </div>
         </form>
 
         <div className="flex items-center gap-2">
@@ -807,6 +842,19 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
           </div>
         </div>
       )}
+
+      {/* Optical Barcode & SKU Scanner Interface */}
+      <BarcodeScannerModal
+        isOpen={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        products={products}
+        onSelectProduct={(p) => {
+          setSearch(p.sku);
+          onSwitchSubTab('catalog');
+          setFeedbackMsg(`Scanner: Located ${p.sku} (${p.name})`);
+          setTimeout(() => setFeedbackMsg(null), 3500);
+        }}
+      />
     </div>
   );
 };
