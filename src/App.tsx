@@ -8,6 +8,7 @@ import { OperationsScreen } from './components/OperationsScreen';
 import { ProductsScreen } from './components/ProductsScreen';
 import { MoveHistoryScreen } from './components/MoveHistoryScreen';
 import { SettingsScreen } from './components/SettingsScreen';
+import { StockSenseLogo } from './components/StockSenseLogo';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -158,8 +159,8 @@ export default function App() {
 
       <footer className="border-t border-[#34312B] bg-[#201E1A] py-3 text-center text-xs font-mono text-[#8B8478]">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span>STOCKSENSE IMS — Industrial Warehouse Operations</span>
+          <div className="flex items-center gap-3">
+            <StockSenseLogo variant="compact" size="sm" />
             <span className="text-[10px] px-1.5 py-0.2 bg-[#262420] text-[#F2C230] border border-[#34312B]">
               ROLE: {currentUser.role.toUpperCase()}
             </span>

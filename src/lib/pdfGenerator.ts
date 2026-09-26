@@ -57,19 +57,31 @@ export function downloadCatalogPdf(
   doc.setFillColor(242, 194, 48); // #F2C230
   doc.rect(0, 28, pageWidth, 2, 'F');
 
-  // Logo badge
-  doc.setFillColor(242, 194, 48);
-  doc.rect(14, 5, 18, 18, 'F');
-  doc.setTextColor(26, 24, 22);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text('S', 20.5, 18);
+  // Brand Badge (Isometric Network Cube)
+  doc.setFillColor(38, 39, 52);
+  doc.roundedRect(14, 5, 18, 18, 2, 2, 'F');
+  doc.setFillColor(0, 229, 153);
+  doc.circle(18, 17, 1.8, 'F');
+  doc.setFillColor(129, 140, 248);
+  doc.circle(27, 10, 1.8, 'F');
+  doc.setFillColor(255, 255, 255);
+  doc.circle(20, 9, 1.4, 'F');
+  doc.setDrawColor(0, 229, 153);
+  doc.setLineWidth(0.6);
+  doc.line(18, 17, 27, 10);
 
-  // Title
-  doc.setTextColor(245, 243, 239);
+  // Title: Stock (White) Sense (Lavender) [IMS]
+  doc.setTextColor(255, 255, 255);
   doc.setFontSize(13);
   doc.setFont('helvetica', 'bold');
-  doc.text('STOCKSENSE IMS - OFFICIAL INVENTORY REPORT', 37, 12);
+  doc.text('Stock', 37, 13);
+  doc.setTextColor(129, 140, 248);
+  doc.text('Sense', 50, 13);
+  doc.setFillColor(35, 35, 44);
+  doc.roundedRect(66, 8, 12, 6, 1, 1, 'F');
+  doc.setTextColor(156, 163, 175);
+  doc.setFontSize(7);
+  doc.text('IMS', 68.5, 12.2);
 
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
@@ -370,19 +382,31 @@ export function downloadOperationPdf(op: Operation, currentUserName: string = 'S
   doc.setFillColor(242, 194, 48);
   doc.rect(0, 32, pageWidth, 2, 'F');
 
-  // Brand Badge
-  doc.setFillColor(242, 194, 48);
-  doc.rect(14, 6, 18, 18, 'F');
-  doc.setTextColor(26, 24, 22);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text('S', 20.5, 19);
+  // Brand Badge (Isometric Network Cube)
+  doc.setFillColor(38, 39, 52);
+  doc.roundedRect(14, 6, 18, 18, 2, 2, 'F');
+  doc.setFillColor(0, 229, 153);
+  doc.circle(18, 18, 1.8, 'F');
+  doc.setFillColor(129, 140, 248);
+  doc.circle(27, 11, 1.8, 'F');
+  doc.setFillColor(255, 255, 255);
+  doc.circle(20, 10, 1.4, 'F');
+  doc.setDrawColor(0, 229, 153);
+  doc.setLineWidth(0.6);
+  doc.line(18, 18, 27, 11);
 
-  // Brand Name
-  doc.setTextColor(245, 243, 239);
+  // Brand Name: Stock (White) Sense (Lavender) [IMS]
+  doc.setTextColor(255, 255, 255);
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text('STOCKSENSE IMS', 37, 14);
+  doc.text('Stock', 37, 15);
+  doc.setTextColor(129, 140, 248);
+  doc.text('Sense', 51, 15);
+  doc.setFillColor(35, 35, 44);
+  doc.roundedRect(68, 9.5, 13, 7, 1, 1, 'F');
+  doc.setTextColor(156, 163, 175);
+  doc.setFontSize(7.5);
+  doc.text('IMS', 71, 14.5);
 
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');

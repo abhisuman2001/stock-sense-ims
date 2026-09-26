@@ -373,9 +373,17 @@ export function generateCatalogReportHtml(
       <body>
         <div class="header">
           <div class="brand-box">
-            <div class="brand-logo">S</div>
+            <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+              <path d="M20 2 L37 11.5 L20 21 L3 11.5 Z" fill="#282936" stroke="#3E4052" stroke-width="1.2" />
+              <path d="M3 11.5 L20 21 L20 38 L3 28.5 Z" fill="#1C1D26" stroke="#3E4052" stroke-width="1.2" />
+              <path d="M20 21 L37 11.5 L37 28.5 L20 38 Z" fill="#14151D" stroke="#3E4052" stroke-width="1.2" />
+              <line x1="9" y1="26" x2="28" y2="17" stroke="#00E599" stroke-width="2.2" stroke-linecap="round" />
+              <circle cx="16" cy="10" r="2.2" fill="#FFFFFF" />
+              <circle cx="9" cy="26" r="2.8" fill="#00E599" />
+              <circle cx="28" cy="17" r="2.8" fill="#818CF8" />
+            </svg>
             <div>
-              <div class="brand-title">STOCKSENSE IMS</div>
+              <div class="brand-title"><strong>Stock</strong> <span style="color: #6366F1;">Sense</span> <span style="font-size: 9px; background: #23232C; color: #9CA3AF; padding: 2px 5px; border-radius: 3px; font-family: monospace;">IMS</span></div>
               <div class="brand-sub">Modular Inventory Control & Physical Ledger</div>
               <div class="report-heading">${reportTitle}</div>
             </div>
@@ -696,9 +704,17 @@ export function generateOperationDocumentHtml(
       <body>
         <div class="header">
           <div>
-            <div>
-              <span class="brand-logo">S</span>
-              <span class="brand-title">STOCKSENSE IMS</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
+                <path d="M20 2 L37 11.5 L20 21 L3 11.5 Z" fill="#282936" stroke="#3E4052" stroke-width="1.2" />
+                <path d="M3 11.5 L20 21 L20 38 L3 28.5 Z" fill="#1C1D26" stroke="#3E4052" stroke-width="1.2" />
+                <path d="M20 21 L37 11.5 L37 28.5 L20 38 Z" fill="#14151D" stroke="#3E4052" stroke-width="1.2" />
+                <line x1="9" y1="26" x2="28" y2="17" stroke="#00E599" stroke-width="2.2" stroke-linecap="round" />
+                <circle cx="16" cy="10" r="2.2" fill="#FFFFFF" />
+                <circle cx="9" cy="26" r="2.8" fill="#00E599" />
+                <circle cx="28" cy="17" r="2.8" fill="#818CF8" />
+              </svg>
+              <div class="brand-title"><strong>Stock</strong> <span style="color: #6366F1;">Sense</span> <span style="font-size: 9px; background: #23232C; color: #9CA3AF; padding: 2px 5px; border-radius: 3px; font-family: monospace;">IMS</span></div>
             </div>
             <div class="brand-sub">Industrial Logistics & Warehouse Management</div>
             <div class="doc-heading">${docConfig.title}</div>

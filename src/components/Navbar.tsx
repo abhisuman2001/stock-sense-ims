@@ -1,6 +1,7 @@
 import React from 'react';
 import { User } from '../types';
 import { ThemeToggle } from './ThemeToggle';
+import { StockSenseLogo } from './StockSenseLogo';
 import {
   LayoutDashboard,
   ArrowDownToLine,
@@ -46,23 +47,15 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo & Brand */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => onSelectTab('dashboard')}>
-            <div className="w-8 h-8 bg-[#F2C230] text-[#1A1816] flex items-center justify-center font-bold text-lg font-mono">
-              S
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold tracking-tight text-[#F5F3EF]">
-                  STOCKSENSE
-                </span>
-                <span className="text-[10px] font-mono tracking-widest px-1.5 py-0.5 bg-[#262420] text-[#8B8478] border border-[#34312B]">
-                  RBAC SECURED
-                </span>
-              </div>
-              <div className="text-[11px] text-[#8B8478] -mt-0.5 tracking-wide">
-                Industrial Inventory Engine
-              </div>
-            </div>
+          <div
+            className="flex items-center gap-3 cursor-pointer group"
+            onClick={() => onSelectTab('dashboard')}
+            title="Return to Dashboard"
+          >
+            <StockSenseLogo variant="full" size="md" />
+            <span className="hidden lg:inline text-[9px] font-mono tracking-widest px-1.5 py-0.5 bg-[#262420] text-[#8B8478] border border-[#34312B] uppercase">
+              RBAC SECURED
+            </span>
           </div>
 
           {/* Main Navigation Tabs */}
