@@ -10,6 +10,7 @@ import {
   User,
 } from '../types';
 import { StatusBadge } from './StatusBadge';
+import { printHtmlViaIframe, generateOperationDocumentHtml } from '../lib/printUtils';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -519,15 +520,22 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowPrintModal(true)}
-                  title="Print Slip"
-                  className="p-2 border border-[#34312B] bg-[#1A1816] text-[#8B8478] hover:text-[#F5F3EF]"
+                  onClick={() => {
+                    const html = generateOperationDocumentHtml(
+                      activeOp,
+                      currentUser?.full_name || 'Staff'
+                    );
+                    printHtmlViaIframe(`StockSense_${activeOp.reference}_Document`, html);
+                  }}
+                  title="Print or Save Document as PDF"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-[#34312B] bg-[#1A1816] hover:border-[#F2C230] text-[#F5F3EF] hover:text-[#F2C230] text-xs font-mono transition-colors cursor-pointer"
                 >
-                  <Printer className="w-4 h-4" />
+                  <Printer className="w-4 h-4 text-[#F2C230]" />
+                  <span>Print / PDF</span>
                 </button>
                 <button
                   onClick={() => setActiveOp(null)}
-                  className="p-2 text-[#8B8478] hover:text-[#F5F3EF]"
+                  className="p-2 text-[#8B8478] hover:text-[#F5F3EF] cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -648,6 +656,22 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const html = generateOperationDocumentHtml(
+                      activeOp,
+                      currentUser?.full_name || 'Staff'
+                    );
+                    printHtmlViaIframe(`StockSense_${activeOp.reference}_Document`, html);
+                  }}
+                  className="px-3 py-2 border border-[#34312B] bg-[#1A1816] text-[#F5F3EF] hover:border-[#F2C230] text-xs font-mono flex items-center gap-1.5 cursor-pointer"
+                  title="Print or Save Official Warehouse Document as PDF"
+                >
+                  <Printer className="w-3.5 h-3.5 text-[#F2C230]" />
+                  <span>Print Document (PDF)</span>
+                </button>
+
                 {activeOp.status === 'draft' && (
                   <button
                     onClick={() => handleMarkReady(activeOp.id)}
@@ -915,14 +939,23 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
 
             <div className="mt-6 flex justify-end gap-2 print:hidden">
               <button
-                onClick={() => window.print()}
-                className="px-4 py-2 bg-black text-white text-xs font-bold font-mono"
+                type="button"
+                onClick={() => {
+                  const html = generateOperationDocumentHtml(
+                    activeOp,
+                    currentUser?.full_name || 'Staff'
+                  );
+                  printHtmlViaIframe(`StockSense_${activeOp.reference}_Document`, html);
+                }}
+                className="px-4 py-2 bg-black hover:bg-neutral-800 text-white text-xs font-bold font-mono flex items-center gap-1.5 cursor-pointer"
               >
-                Print Slip
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / Save as PDF</span>
               </button>
               <button
+                type="button"
                 onClick={() => setShowPrintModal(false)}
-                className="px-4 py-2 border border-black text-xs font-mono"
+                className="px-4 py-2 border border-black hover:bg-neutral-100 text-xs font-mono cursor-pointer"
               >
                 Close
               </button>

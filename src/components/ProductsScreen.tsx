@@ -19,7 +19,9 @@ import {
   Scan,
   QrCode,
   Download,
+  Printer,
 } from 'lucide-react';
+import { printHtmlViaIframe, generateCatalogReportHtml } from '../lib/printUtils';
 
 interface ProductsScreenProps {
   subTab: 'catalog' | 'stock';
@@ -362,6 +364,65 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
     }
   };
 
+  const handlePrintPdf = () => {
+    try {
+      const activeProducts = products.filter(
+        (p) => !showLowStockOnly || p.total_on_hand <= p.reorder_point
+      );
+
+      if (subTab === 'catalog' && activeProducts.length === 0) {
+        setError('No catalog items available to print with current filters.');
+        setTimeout(() => setError(null), 3000);
+        return;
+      }
+
+      if (subTab === 'stock' && stockQuants.length === 0) {
+        setError('No stock ledger records available to print.');
+        setTimeout(() => setError(null), 3000);
+        return;
+      }
+
+      const filterParts: string[] = [];
+      if (selectedCategory) {
+        const cat = categories.find((c) => String(c.id) === selectedCategory);
+        filterParts.push(`Category: ${cat?.name || selectedCategory}`);
+      }
+      if (selectedWarehouse) {
+        const wh = warehouses.find((w) => String(w.id) === selectedWarehouse);
+        filterParts.push(`Warehouse: [${wh?.short_code || ''}] ${wh?.name || selectedWarehouse}`);
+      }
+      if (search) {
+        filterParts.push(`Search: "${search}"`);
+      }
+      if (showLowStockOnly) {
+        filterParts.push('Filter: Low / Critical Stock Breaches');
+      }
+
+      const scopeText = filterParts.length > 0 ? filterParts.join(' | ') : 'All Catalog Records';
+
+      const html = generateCatalogReportHtml(
+        subTab,
+        activeProducts,
+        stockQuants,
+        currentUser?.full_name || 'Sarah Connor',
+        scopeText
+      );
+
+      printHtmlViaIframe(
+        subTab === 'catalog'
+          ? 'StockSense_Inventory_Catalog_Report'
+          : 'StockSense_Physical_Stock_Ledger_Audit',
+        html
+      );
+
+      setFeedbackMsg('Print preview dispatched — select "Save as PDF" in the print destination menu.');
+      setTimeout(() => setFeedbackMsg(null), 4000);
+    } catch (err: any) {
+      setError('Failed to initiate print/PDF export: ' + (err.message || 'Unknown error'));
+      setTimeout(() => setError(null), 4000);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -403,7 +464,20 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
             >
               <Download className="w-4 h-4 text-[#F2C230]" />
               <span className="hidden sm:inline">Export to CSV</span>
-              <span className="sm:hidden">Export</span>
+              <span className="sm:hidden">CSV</span>
+            </button>
+          )}
+
+          {/* Print / Save as PDF Button */}
+          {isManager && (
+            <button
+              onClick={handlePrintPdf}
+              className="bg-[#262420] hover:bg-[#34312B] border border-[#34312B] hover:border-[#F2C230] text-[#F5F3EF] hover:text-[#F2C230] text-xs font-mono font-medium py-2 px-3 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title={subTab === 'catalog' ? 'Print or Save Official Catalog Report as PDF' : 'Print or Save Physical Stock Ledger Audit as PDF'}
+            >
+              <Printer className="w-4 h-4 text-[#F2C230]" />
+              <span className="hidden sm:inline">Print / PDF</span>
+              <span className="sm:hidden">PDF</span>
             </button>
           )}
 
