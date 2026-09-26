@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Product, StockQuant, Category, Warehouse, Location } from '../types';
+import { Product, StockQuant, Category, Warehouse, Location, User } from '../types';
 import {
   Boxes,
   Plus,
@@ -17,9 +17,12 @@ import {
 interface ProductsScreenProps {
   subTab: 'catalog' | 'stock';
   onSwitchSubTab: (tab: 'catalog' | 'stock') => void;
+  currentUser?: User | null;
 }
 
-export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitchSubTab }) => {
+export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitchSubTab, currentUser }) => {
+  const isManager =
+    currentUser?.role === 'inventory_manager' || (currentUser?.role as any) === 'manager';
   const [products, setProducts] = useState<Product[]>([]);
   const [stockQuants, setStockQuants] = useState<StockQuant[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -179,13 +182,15 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-[#F2C230] hover:bg-[#D9AD25] text-[#1A1816] font-semibold text-xs py-2 px-3 transition-colors flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Product</span>
-          </button>
+          {isManager && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-[#F2C230] hover:bg-[#D9AD25] text-[#1A1816] font-semibold text-xs py-2 px-3 transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Product</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -316,7 +321,9 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
                         {p.uom}
                       </td>
                       <td className="py-3 px-4 font-mono tabular-nums text-right text-[#F5F3EF]">
-                        ${p.cost.toFixed(2)}
+                        {p.cost !== null && p.cost !== undefined ? `$${p.cost.toFixed(2)}` : (
+                          <span className="text-[10px] text-[#8B8478] font-mono">RESTRICTED</span>
+                        )}
                       </td>
                       <td className="py-3 px-4 font-mono tabular-nums text-right text-[#8B8478]">
                         {p.reorder_point.toFixed(1)}
@@ -359,7 +366,9 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
                 <th className="py-3 px-4 font-medium">Facility / Warehouse</th>
                 <th className="py-3 px-4 font-medium">Location</th>
                 <th className="py-3 px-4 font-medium text-right">Unit Cost</th>
-                <th className="py-3 px-4 font-medium text-right">On Hand (Editable)</th>
+                <th className="py-3 px-4 font-medium text-right">
+                  {isManager ? 'On Hand (Editable)' : 'On Hand (Station Count)'}
+                </th>
                 <th className="py-3 px-4 font-medium text-right">Reserved</th>
                 <th className="py-3 px-4 font-medium text-right">Free to Use</th>
               </tr>
@@ -397,49 +406,58 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
                         {q.location_name}
                       </td>
                       <td className="py-3 px-4 font-mono tabular-nums text-right text-[#8B8478]">
-                        ${q.cost.toFixed(2)}
+                        {q.cost !== null && q.cost !== undefined ? `$${q.cost.toFixed(2)}` : (
+                          <span className="text-[10px] text-[#8B8478] font-mono">RESTRICTED</span>
+                        )}
                       </td>
 
-                      {/* On Hand - Inline editable cell */}
+                      {/* On Hand - Inline editable cell for managers only */}
                       <td className="py-3 px-4 font-mono tabular-nums text-right">
-                        {isEditing ? (
-                          <div className="flex items-center justify-end gap-1">
-                            <input
-                              type="number"
-                              step="any"
-                              min="0"
-                              value={editingValue}
-                              onChange={(e) => setEditingValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveEditQuant(q.product_id, q.location_id);
-                                if (e.key === 'Escape') setEditingQuantKey(null);
-                              }}
-                              autoFocus
-                              className="w-20 bg-[#1A1816] border border-[#F2C230] px-2 py-0.5 text-xs text-right text-[#F5F3EF] font-mono focus:outline-none"
-                            />
-                            <button
-                              onClick={() => saveEditQuant(q.product_id, q.location_id)}
-                              disabled={savingStock}
-                              className="p-1 bg-[#F2C230] text-[#1A1816] hover:bg-[#D9AD25]"
+                        {isManager ? (
+                          isEditing ? (
+                            <div className="flex items-center justify-end gap-1">
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                value={editingValue}
+                                onChange={(e) => setEditingValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveEditQuant(q.product_id, q.location_id);
+                                  if (e.key === 'Escape') setEditingQuantKey(null);
+                                }}
+                                autoFocus
+                                className="w-20 bg-[#1A1816] border border-[#F2C230] px-2 py-0.5 text-xs text-right text-[#F5F3EF] font-mono focus:outline-none"
+                              />
+                              <button
+                                onClick={() => saveEditQuant(q.product_id, q.location_id)}
+                                disabled={savingStock}
+                                className="p-1 bg-[#F2C230] text-[#1A1816] hover:bg-[#D9AD25]"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setEditingQuantKey(null)}
+                                className="p-1 border border-[#34312B] bg-[#1A1816] text-[#8B8478] hover:text-[#F5F3EF]"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => startEditQuant(q)}
+                              className="group flex items-center justify-end gap-1.5 cursor-pointer font-semibold text-[#F5F3EF] hover:text-[#F2C230]"
+                              title="Click to edit stock level"
                             >
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => setEditingQuantKey(null)}
-                              className="p-1 border border-[#34312B] bg-[#1A1816] text-[#8B8478] hover:text-[#F5F3EF]"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                              <span>{q.on_hand.toFixed(1)}</span>
+                              <span className="text-[10px] text-[#8B8478]">{q.uom}</span>
+                              <Edit2 className="w-3 h-3 text-[#8B8478] opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                          )
                         ) : (
-                          <div
-                            onClick={() => startEditQuant(q)}
-                            className="group flex items-center justify-end gap-1.5 cursor-pointer font-semibold text-[#F5F3EF] hover:text-[#F2C230]"
-                            title="Click to edit stock level"
-                          >
+                          <div className="flex items-center justify-end gap-1.5 font-semibold text-[#F5F3EF]">
                             <span>{q.on_hand.toFixed(1)}</span>
                             <span className="text-[10px] text-[#8B8478]">{q.uom}</span>
-                            <Edit2 className="w-3 h-3 text-[#8B8478] opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
                         )}
                       </td>

@@ -1,12 +1,14 @@
 export type OperationType = 'receipt' | 'delivery' | 'internal' | 'adjustment';
 export type OperationStatus = 'draft' | 'waiting' | 'ready' | 'done' | 'cancelled';
-export type UserRole = 'manager' | 'staff';
+export type UserRole = 'inventory_manager' | 'floor_operator' | 'manager' | 'staff';
 
 export interface User {
   id: number;
   email: string;
   full_name: string;
   role: UserRole;
+  assigned_warehouse_id?: number | null;
+  assigned_warehouse_code?: string | null;
 }
 
 export interface Warehouse {
@@ -37,7 +39,7 @@ export interface Product {
   category_name?: string | null;
   uom: string;
   reorder_point: number;
-  cost: number;
+  cost?: number | null;
   total_on_hand: number;
   total_free_to_use: number;
 }
@@ -48,7 +50,7 @@ export interface StockQuant {
   sku: string;
   category_name?: string;
   uom: string;
-  cost: number;
+  cost?: number | null;
   location_id: number;
   location_name: string;
   warehouse_code: string;
@@ -101,12 +103,18 @@ export interface StockMove {
 }
 
 export interface DashboardKPIs {
+  role: 'inventory_manager' | 'floor_operator';
+  assigned_warehouse_id?: number | null;
+  assigned_warehouse_name?: string | null;
   total_products: number;
   low_or_out_of_stock_count: number;
   pending_receipts_count: number;
   pending_deliveries_count: number;
   scheduled_transfers_count: number;
-  total_stock_value: number;
+  total_stock_value?: number | null;
+  assigned_receipts_to_process?: number;
+  assigned_deliveries_to_process?: number;
+  task_message?: string | null;
   recent_receipts: Operation[];
   recent_deliveries: Operation[];
 }

@@ -10,17 +10,20 @@ import { MoveHistoryScreen } from './components/MoveHistoryScreen';
 import { SettingsScreen } from './components/SettingsScreen';
 
 export default function App() {
-  // Current user state (starts with demo user or stored user for immediate usability)
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = getStoredUser();
     if (saved) return saved;
-    // Default demo user so app is immediately alive on load without forcing re-login every time
-    return {
+    // Default demo user is Sarah Connor (Manager)
+    const defaultUser: User = {
       id: 1,
       email: 'demo@stocksense.io',
-      full_name: 'Sarah Connor (Inventory Manager)',
-      role: 'manager',
+      full_name: 'Sarah Connor',
+      role: 'inventory_manager',
+      assigned_warehouse_id: 1,
+      assigned_warehouse_code: 'WH',
     };
+    localStorage.setItem('stocksense_token', `jwt_token_1_${Date.now()}`);
+    return defaultUser;
   });
 
   // Navigation state
@@ -31,8 +34,18 @@ export default function App() {
   // Cross-view state (opening a specific operation from dashboard)
   const [selectedOpFromDashboard, setSelectedOpFromDashboard] = useState<Operation | null>(null);
 
-  // Stock update signal for child components
+  // Signal counter to trigger re-fetches across views
   const [stockUpdateCounter, setStockUpdateCounter] = useState(0);
+
+  const isManager =
+    currentUser?.role === 'inventory_manager' || (currentUser?.role as any) === 'manager';
+
+  // If user is Floor Operator and navigates or switches to Settings, redirect to Dashboard
+  useEffect(() => {
+    if (!isManager && currentTab === 'settings') {
+      setCurrentTab('dashboard');
+    }
+  }, [currentUser, currentTab, isManager]);
 
   const handleLogout = () => {
     setStoredUser(null);
@@ -43,6 +56,40 @@ export default function App() {
   const handleAuthSuccess = (user: User) => {
     setCurrentUser(user);
     setCurrentTab('dashboard');
+  };
+
+  // 1-Click Fast Role Switcher for Hackathon Demo
+  const handleSwitchRole = () => {
+    if (isManager) {
+      // Switch to Floor Operator
+      const opUser: User = {
+        id: 2,
+        email: 'staff@stocksense.io',
+        full_name: 'Alex Vance',
+        role: 'floor_operator',
+        assigned_warehouse_id: 1,
+        assigned_warehouse_code: 'WH',
+      };
+      localStorage.setItem('stocksense_token', `jwt_token_2_${Date.now()}`);
+      setStoredUser(opUser);
+      setCurrentUser(opUser);
+      setCurrentTab('dashboard');
+    } else {
+      // Switch to Inventory Manager
+      const mgrUser: User = {
+        id: 1,
+        email: 'demo@stocksense.io',
+        full_name: 'Sarah Connor',
+        role: 'inventory_manager',
+        assigned_warehouse_id: 1,
+        assigned_warehouse_code: 'WH',
+      };
+      localStorage.setItem('stocksense_token', `jwt_token_1_${Date.now()}`);
+      setStoredUser(mgrUser);
+      setCurrentUser(mgrUser);
+      setCurrentTab('dashboard');
+    }
+    setStockUpdateCounter((c) => c + 1);
   };
 
   const navigateToOperations = (sub: OperationsSubTab) => {
@@ -90,12 +137,13 @@ export default function App() {
         onSelectProductsSubTab={setProductsSubTab}
         user={currentUser}
         onLogout={handleLogout}
+        onSwitchRole={handleSwitchRole}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {currentTab === 'dashboard' && (
           <DashboardScreen
-            key={`dashboard_${stockUpdateCounter}`}
+            key={`dashboard_${currentUser.id}_${stockUpdateCounter}`}
             onNavigateToOperations={navigateToOperations}
             onOpenNewOperationModal={(type) => {
               const typeToSub: Record<OperationType, OperationsSubTab> = {
@@ -113,7 +161,7 @@ export default function App() {
 
         {currentTab === 'operations' && (
           <OperationsScreen
-            key={`${operationsSubTab}_${stockUpdateCounter}`}
+            key={`${operationsSubTab}_${currentUser.id}_${stockUpdateCounter}`}
             type={mapSubTabToType(operationsSubTab)}
             selectedOpFromDashboard={selectedOpFromDashboard}
             onClearSelectedOpFromDashboard={() => setSelectedOpFromDashboard(null)}
@@ -124,24 +172,33 @@ export default function App() {
 
         {currentTab === 'products' && (
           <ProductsScreen
-            key={`${productsSubTab}_${stockUpdateCounter}`}
+            key={`${productsSubTab}_${currentUser.id}_${stockUpdateCounter}`}
             subTab={productsSubTab}
             onSwitchSubTab={setProductsSubTab}
+            currentUser={currentUser}
           />
         )}
 
         {currentTab === 'moves' && (
-          <MoveHistoryScreen key={`moves_${stockUpdateCounter}`} />
+          <MoveHistoryScreen
+            key={`moves_${currentUser.id}_${stockUpdateCounter}`}
+            currentUser={currentUser}
+          />
         )}
 
-        {currentTab === 'settings' && (
+        {currentTab === 'settings' && isManager && (
           <SettingsScreen currentUser={currentUser} />
         )}
       </main>
 
       <footer className="border-t border-[#34312B] bg-[#201E1A] py-3 text-center text-xs font-mono text-[#8B8478]">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>STOCKSENSE IMS — Industrial Warehouse & Inventory Control Engine</span>
+          <div className="flex items-center gap-2">
+            <span>STOCKSENSE IMS — Industrial Warehouse Operations</span>
+            <span className="text-[10px] px-1.5 py-0.2 bg-[#262420] text-[#F2C230] border border-[#34312B]">
+              ROLE: {currentUser.role.toUpperCase()}
+            </span>
+          </div>
           <span className="text-[11px] text-[#F2C230]">All stock moves atomic & ledger-backed</span>
         </div>
       </footer>

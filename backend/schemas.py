@@ -9,7 +9,8 @@ class UserSignupRequest(BaseModel):
     email: str = Field(..., min_length=5, max_length=255)
     password: str = Field(..., min_length=6)
     full_name: str = Field(..., min_length=2, max_length=255)
-    role: UserRole = UserRole.STAFF
+    role: UserRole = Field(..., description="Role is required at signup: inventory_manager or floor_operator")
+    assigned_warehouse_id: Optional[int] = None
 
 
 class UserLoginRequest(BaseModel):
@@ -32,6 +33,8 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     role: UserRole
+    assigned_warehouse_id: Optional[int] = None
+    assigned_warehouse_code: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -136,7 +139,7 @@ class ProductResponse(BaseModel):
     category_name: Optional[str] = None
     uom: str
     reorder_point: float
-    cost: float
+    cost: Optional[float] = None
     total_on_hand: float = 0.0
     total_free_to_use: float = 0.0
 
@@ -150,7 +153,7 @@ class StockQuantResponse(BaseModel):
     sku: str
     category_name: Optional[str]
     uom: str
-    cost: float
+    cost: Optional[float] = None
     location_id: int
     location_name: str
     warehouse_code: str
@@ -234,13 +237,19 @@ class StockMoveResponse(BaseModel):
         from_attributes = True
 
 
-# Dashboard Aggregation Schema
+# Dashboard Aggregation Schema (Role-Scoped)
 class DashboardKPIs(BaseModel):
+    role: str
+    assigned_warehouse_id: Optional[int] = None
+    assigned_warehouse_name: Optional[str] = None
     total_products: int
     low_or_out_of_stock_count: int
     pending_receipts_count: int
     pending_deliveries_count: int
     scheduled_transfers_count: int
-    total_stock_value: float
+    total_stock_value: Optional[float] = None
+    assigned_receipts_to_process: Optional[int] = None
+    assigned_deliveries_to_process: Optional[int] = None
+    task_message: Optional[str] = None
     recent_receipts: List[OperationResponse] = []
     recent_deliveries: List[OperationResponse] = []

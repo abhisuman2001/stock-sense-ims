@@ -25,8 +25,11 @@ class OperationStatus(str, enum.Enum):
 
 
 class UserRole(str, enum.Enum):
-    MANAGER = "manager"
-    STAFF = "staff"
+    INVENTORY_MANAGER = "inventory_manager"
+    FLOOR_OPERATOR = "floor_operator"
+    # Aliases
+    MANAGER = "inventory_manager"
+    STAFF = "floor_operator"
 
 
 class User(Base):
@@ -36,9 +39,11 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=False)
-    role = Column(SQLEnum(UserRole), default=UserRole.STAFF, nullable=False)
+    role = Column(SQLEnum(UserRole, values_callable=lambda x: [e.value for e in x]), default=UserRole.FLOOR_OPERATOR, nullable=False)
+    assigned_warehouse_id = Column(Integer, ForeignKey("warehouses.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
+    assigned_warehouse = relationship("Warehouse", foreign_keys=[assigned_warehouse_id])
     operations = relationship("Operation", back_populates="responsible_user")
 
 

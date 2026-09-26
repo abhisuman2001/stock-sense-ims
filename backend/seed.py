@@ -24,26 +24,28 @@ def seed_database():
 
         print("Seeding StockSense database with initial operational data...")
 
-        # 1. Users
+        # 2. Warehouses & Locations
+        wh_main = Warehouse(name="Main Central Facility", short_code="WH", address="Dock 4B, Industrial Zone West")
+        wh_cold = Warehouse(name="Cold Storage Annex", short_code="CS", address="Sector 7, North Logistics Park")
+        db.add_all([wh_main, wh_cold])
+        db.flush()
+
+        # 1. Users with assigned warehouses
         manager = User(
             email="demo@stocksense.io",
             hashed_password=hash_pwd("Password123!"),
             full_name="Sarah Connor (Inventory Manager)",
-            role=UserRole.MANAGER,
+            role=UserRole.INVENTORY_MANAGER,
+            assigned_warehouse_id=wh_main.id,
         )
         staff = User(
             email="staff@stocksense.io",
             hashed_password=hash_pwd("Password123!"),
             full_name="Alex Vance (Floor Operator)",
-            role=UserRole.STAFF,
+            role=UserRole.FLOOR_OPERATOR,
+            assigned_warehouse_id=wh_main.id,
         )
         db.add_all([manager, staff])
-        db.flush()
-
-        # 2. Warehouses & Locations
-        wh_main = Warehouse(name="Main Central Facility", short_code="WH", address="Dock 4B, Industrial Zone West")
-        wh_cold = Warehouse(name="Cold Storage Annex", short_code="CS", address="Sector 7, North Logistics Park")
-        db.add_all([wh_main, wh_cold])
         db.flush()
 
         loc_wh_stock = Location(name="General Stock Storage", short_code="STOCK", warehouse_id=wh_main.id)

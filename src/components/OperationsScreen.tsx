@@ -273,6 +273,9 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
     }
   };
 
+  const isManager =
+    currentUser?.role === 'inventory_manager' || (currentUser?.role as any) === 'manager';
+
   const info = getTitleByType();
 
   // Kanban groupings
@@ -302,13 +305,15 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-[#F2C230] hover:bg-[#D9AD25] text-[#1A1816] font-semibold text-xs py-2 px-3 transition-colors flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create Operation</span>
-          </button>
+          {(isManager || type === 'internal' || type === 'adjustment') && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-[#F2C230] hover:bg-[#D9AD25] text-[#1A1816] font-semibold text-xs py-2 px-3 transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Operation</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -626,7 +631,7 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
             {/* Actions Bar adhering to single primary button rule */}
             <div className="flex items-center justify-between pt-4 border-t border-[#34312B]">
               <div className="flex items-center gap-2">
-                {activeOp.status !== 'done' && activeOp.status !== 'cancelled' && (
+                {isManager && activeOp.status !== 'done' && activeOp.status !== 'cancelled' && (
                   <button
                     onClick={() => handleCancelOperation(activeOp.id)}
                     disabled={actionInProgress}
@@ -634,6 +639,11 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
                   >
                     Cancel Document
                   </button>
+                )}
+                {!isManager && activeOp.responsible_user_id !== currentUser?.id && (
+                  <span className="text-[11px] font-mono text-[#8B8478] bg-[#1A1816] px-2 py-1 border border-[#34312B]">
+                    Assigned operator: {activeOp.responsible_user_name || 'Staff'}
+                  </span>
                 )}
               </div>
 

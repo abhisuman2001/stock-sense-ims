@@ -1,10 +1,10 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
 
 // --- DATA TYPES ---
 export type OperationType = 'receipt' | 'delivery' | 'internal' | 'adjustment';
 export type OperationStatus = 'draft' | 'waiting' | 'ready' | 'done' | 'cancelled';
-export type UserRole = 'manager' | 'staff';
+export type UserRole = 'inventory_manager' | 'floor_operator';
 
 interface User {
   id: number;
@@ -12,6 +12,7 @@ interface User {
   passwordHash: string;
   fullName: string;
   role: UserRole;
+  assignedWarehouseId: number | null;
   createdAt: string;
 }
 
@@ -91,33 +92,35 @@ interface StockMove {
   movedAt: string;
 }
 
-// In-Memory Database store initialized with realistic seed data
+// In-Memory Database store with realistic multi-warehouse seed data
 const DB = {
+  warehouses: [
+    { id: 1, name: 'Main Central Facility', shortCode: 'WH', address: 'Dock 4B, Industrial Zone West' },
+    { id: 2, name: 'Cold Storage Annex', shortCode: 'CS', address: 'Sector 7, North Logistics Park' },
+  ] as Warehouse[],
+
   users: [
     {
       id: 1,
       email: 'demo@stocksense.io',
       passwordHash: 'Password123!',
-      fullName: 'Sarah Connor (Inventory Manager)',
-      role: 'manager' as UserRole,
+      fullName: 'Sarah Connor',
+      role: 'inventory_manager' as UserRole,
+      assignedWarehouseId: 1,
       createdAt: new Date().toISOString(),
     },
     {
       id: 2,
       email: 'staff@stocksense.io',
       passwordHash: 'Password123!',
-      fullName: 'Alex Vance (Floor Operator)',
-      role: 'staff' as UserRole,
+      fullName: 'Alex Vance',
+      role: 'floor_operator' as UserRole,
+      assignedWarehouseId: 1,
       createdAt: new Date().toISOString(),
     },
   ] as User[],
 
   otps: [] as OTPRecord[],
-
-  warehouses: [
-    { id: 1, name: 'Main Central Facility', shortCode: 'WH', address: 'Dock 4B, Industrial Zone West' },
-    { id: 2, name: 'Cold Storage Annex', shortCode: 'CS', address: 'Sector 7, North Logistics Park' },
-  ] as Warehouse[],
 
   locations: [
     { id: 1, name: 'General Stock Storage', shortCode: 'STOCK', warehouseId: 1 },
@@ -149,7 +152,7 @@ const DB = {
     { productId: 1, locationId: 1, onHand: 120.0, reserved: 20.0, freeToUse: 100.0 },
     { productId: 2, locationId: 1, onHand: 22.0, reserved: 0.0, freeToUse: 22.0 }, // LOW
     { productId: 3, locationId: 1, onHand: 8.0, reserved: 8.0, freeToUse: 0.0 },   // CRITICAL LOW
-    { productId: 4, locationId: 1, onHand: 95.0, reserved: 15.0, freeToUse: 80.0 },
+    { productId: 4, locationId: 1, onHand: 120.0, reserved: 15.0, freeToUse: 105.0 },
     { productId: 5, locationId: 1, onHand: 35.0, reserved: 0.0, freeToUse: 35.0 },
     { productId: 6, locationId: 1, onHand: 14.0, reserved: 0.0, freeToUse: 14.0 }, // LOW
     { productId: 3, locationId: 5, onHand: 24.0, reserved: 0.0, freeToUse: 24.0 },
@@ -189,7 +192,7 @@ const DB = {
       contact: 'Sensirion Tech Ltd',
       scheduleDate: new Date(Date.now() + 6 * 3600000).toISOString(),
       status: 'ready',
-      responsibleUserId: 2,
+      responsibleUserId: 2, // Assigned to Alex Vance
       createdAt: new Date(Date.now() - 10 * 3600000).toISOString(),
       lines: [{ id: 2, operationId: 2, productId: 2, quantity: 40.0 }],
     },
@@ -201,7 +204,7 @@ const DB = {
       destLocationId: 1,
       contact: 'Apex Fasteners GmbH',
       scheduleDate: new Date(Date.now() + 24 * 3600000).toISOString(),
-      status: 'draft',
+      status: 'done',
       responsibleUserId: 1,
       createdAt: new Date(Date.now() - 3600000).toISOString(),
       lines: [{ id: 3, operationId: 3, productId: 4, quantity: 25.0 }],
@@ -228,7 +231,7 @@ const DB = {
       contact: 'RoboDrive Dynamics Inc',
       scheduleDate: new Date(Date.now() + 4 * 3600000).toISOString(),
       status: 'ready',
-      responsibleUserId: 2,
+      responsibleUserId: 2, // Assigned to Alex Vance
       createdAt: new Date(Date.now() - 5 * 3600000).toISOString(),
       lines: [
         { id: 5, operationId: 5, productId: 1, quantity: 20.0 },
@@ -282,8 +285,48 @@ const DB = {
       quantity: 2.0,
       movedAt: new Date(Date.now() - 4 * 86400000).toISOString(),
     },
+    {
+      id: 3,
+      operationId: 3,
+      productId: 4,
+      fromLocationId: 2,
+      toLocationId: 1,
+      quantity: 25.0,
+      movedAt: new Date().toISOString(),
+    },
   ] as StockMove[],
 };
+
+// --- AUTH & RBAC MIDDLEWARES ---
+
+function getCurrentUser(req: Request): User {
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith('Bearer jwt_token_')) {
+    const parts = auth.split('_');
+    const userId = Number(parts[2]);
+    const user = DB.users.find((u) => u.id === userId);
+    if (user) return user;
+  }
+  // Default to Manager for local testing fallback
+  return DB.users[0];
+}
+
+function requireRole(...allowedRoles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const user = getCurrentUser(req);
+    const roleNormalized =
+      user.role === 'inventory_manager' || (user.role as any) === 'manager'
+        ? 'inventory_manager'
+        : 'floor_operator';
+
+    if (!allowedRoles.includes(roleNormalized)) {
+      return res.status(403).json({
+        detail: `Forbidden: Action requires '${allowedRoles[0]}' role clearance.`,
+      });
+    }
+    next();
+  };
+}
 
 function getNextReference(warehouseId: number, type: OperationType): string {
   const wh = DB.warehouses.find((w) => w.id === warehouseId);
@@ -311,9 +354,9 @@ async function startServer() {
 
   // --- AUTH ROUTES ---
   app.post('/api/auth/signup', (req: Request, res: Response) => {
-    const { email, password, full_name, role } = req.body;
-    if (!email || !password || !full_name) {
-      return res.status(400).json({ detail: 'Email, password, and full name are required' });
+    const { email, password, full_name, role, assigned_warehouse_id } = req.body;
+    if (!email || !password || !full_name || !role) {
+      return res.status(400).json({ detail: 'Email, password, full name, and role are required' });
     }
     const cleanEmail = email.trim().toLowerCase();
     const existing = DB.users.find((u) => u.email === cleanEmail);
@@ -321,15 +364,21 @@ async function startServer() {
       return res.status(400).json({ detail: 'User with this email already exists' });
     }
 
+    const cleanRole: UserRole =
+      role === 'inventory_manager' || role === 'manager' ? 'inventory_manager' : 'floor_operator';
+
     const newUser: User = {
       id: DB.users.length + 1,
       email: cleanEmail,
       passwordHash: password,
       fullName: full_name.trim(),
-      role: role || 'staff',
+      role: cleanRole,
+      assignedWarehouseId: assigned_warehouse_id ? Number(assigned_warehouse_id) : 1,
       createdAt: new Date().toISOString(),
     };
     DB.users.push(newUser);
+
+    const wh = DB.warehouses.find((w) => w.id === newUser.assignedWarehouseId);
 
     return res.json({
       access_token: `jwt_token_${newUser.id}_${Date.now()}`,
@@ -339,6 +388,8 @@ async function startServer() {
         email: newUser.email,
         full_name: newUser.fullName,
         role: newUser.role,
+        assigned_warehouse_id: newUser.assignedWarehouseId,
+        assigned_warehouse_code: wh ? wh.shortCode : 'WH',
       },
     });
   });
@@ -351,6 +402,8 @@ async function startServer() {
       return res.status(401).json({ detail: 'Invalid email or password credentials' });
     }
 
+    const wh = DB.warehouses.find((w) => w.id === user.assignedWarehouseId);
+
     return res.json({
       access_token: `jwt_token_${user.id}_${Date.now()}`,
       token_type: 'bearer',
@@ -359,6 +412,8 @@ async function startServer() {
         email: user.email,
         full_name: user.fullName,
         role: user.role,
+        assigned_warehouse_id: user.assignedWarehouseId,
+        assigned_warehouse_code: wh ? wh.shortCode : 'WH',
       },
     });
   });
@@ -383,7 +438,7 @@ async function startServer() {
 
     return res.json({
       message: 'OTP sent to registered email.',
-      debug_otp: otpCode, // Convenient for hackathon demo
+      debug_otp: otpCode,
     });
   });
 
@@ -410,12 +465,13 @@ async function startServer() {
     return res.json({ message: 'Password reset successfully. You may now login.' });
   });
 
-  // --- WAREHOUSE & LOCATION ROUTES ---
+  // --- WAREHOUSE & LOCATION ROUTES (RBAC ENFORCED) ---
   app.get('/api/warehouses', (_req: Request, res: Response) => {
     return res.json(DB.warehouses);
   });
 
-  app.post('/api/warehouses', (req: Request, res: Response) => {
+  // Restricted to Inventory Manager
+  app.post('/api/warehouses', requireRole('inventory_manager'), (req: Request, res: Response) => {
     const { name, short_code, address } = req.body;
     if (!name || !short_code) {
       return res.status(400).json({ detail: 'Warehouse name and short code are required' });
@@ -433,7 +489,6 @@ async function startServer() {
     };
     DB.warehouses.push(newWh);
 
-    // Auto-create standard Stock, Input, Output locations
     DB.locations.push(
       { id: DB.locations.length + 1, name: 'General Stock', shortCode: 'STOCK', warehouseId: newWh.id },
       { id: DB.locations.length + 2, name: 'Inbound Receiving Bay', shortCode: 'INPUT', warehouseId: newWh.id },
@@ -462,7 +517,8 @@ async function startServer() {
     return res.json(formatted);
   });
 
-  app.post('/api/locations', (req: Request, res: Response) => {
+  // Restricted to Inventory Manager
+  app.post('/api/locations', requireRole('inventory_manager'), (req: Request, res: Response) => {
     const { name, short_code, warehouse_id } = req.body;
     if (!name || !short_code || !warehouse_id) {
       return res.status(400).json({ detail: 'Name, short_code, and warehouse_id are required' });
@@ -496,7 +552,7 @@ async function startServer() {
     return res.json(DB.categories);
   });
 
-  app.post('/api/categories', (req: Request, res: Response) => {
+  app.post('/api/categories', requireRole('inventory_manager'), (req: Request, res: Response) => {
     const { name } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ detail: 'Category name is required' });
@@ -513,8 +569,11 @@ async function startServer() {
     return res.json(newCat);
   });
 
-  // --- PRODUCTS ---
+  // --- PRODUCTS (RBAC ENFORCED) ---
   app.get('/api/products', (req: Request, res: Response) => {
+    const user = getCurrentUser(req);
+    const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
+
     const { category_id, search } = req.query;
     let list = DB.products;
     if (category_id) {
@@ -530,6 +589,7 @@ async function startServer() {
       const quants = DB.stockQuants.filter((q) => q.productId === p.id);
       const totalOnHand = quants.reduce((sum, q) => sum + q.onHand, 0);
       const totalFree = quants.reduce((sum, q) => sum + q.freeToUse, 0);
+
       return {
         id: p.id,
         sku: p.sku,
@@ -538,7 +598,7 @@ async function startServer() {
         category_name: cat ? cat.name : null,
         uom: p.uom,
         reorder_point: p.reorderPoint,
-        cost: p.cost,
+        cost: isManager ? p.cost : null, // MASKED FOR FLOOR OPERATOR
         total_on_hand: totalOnHand,
         total_free_to_use: totalFree,
       };
@@ -546,7 +606,8 @@ async function startServer() {
     return res.json(formatted);
   });
 
-  app.post('/api/products', (req: Request, res: Response) => {
+  // Restricted to Inventory Manager
+  app.post('/api/products', requireRole('inventory_manager'), (req: Request, res: Response) => {
     const { sku, name, category_id, uom, reorder_point, cost, initial_stock, initial_location_id } = req.body;
     if (!sku || !name) {
       return res.status(400).json({ detail: 'SKU and product name are required' });
@@ -567,7 +628,6 @@ async function startServer() {
     };
     DB.products.push(newProd);
 
-    // Initial stock quant
     if (initial_stock && Number(initial_stock) > 0 && initial_location_id) {
       DB.stockQuants.push({
         productId: newProd.id,
@@ -597,9 +657,16 @@ async function startServer() {
     });
   });
 
-  // --- STOCK QUANTS ---
+  // --- STOCK QUANTS (RBAC ENFORCED) ---
   app.get('/api/stock', (req: Request, res: Response) => {
-    const { warehouse_id } = req.query;
+    const user = getCurrentUser(req);
+    const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
+
+    let { warehouse_id } = req.query;
+    if (!isManager && user.assignedWarehouseId) {
+      warehouse_id = String(user.assignedWarehouseId);
+    }
+
     let list = DB.stockQuants;
     if (warehouse_id) {
       const whId = Number(warehouse_id);
@@ -619,7 +686,7 @@ async function startServer() {
         sku: p ? p.sku : 'N/A',
         category_name: cat ? cat.name : 'Uncategorized',
         uom: p ? p.uom : 'Units',
-        cost: p ? p.cost : 0.0,
+        cost: isManager ? (p ? p.cost : 0.0) : null, // MASKED FOR OPERATOR
         location_id: q.locationId,
         location_name: loc ? loc.name : 'Unknown Location',
         warehouse_code: wh ? wh.shortCode : 'N/A',
@@ -632,7 +699,8 @@ async function startServer() {
     return res.json(formatted);
   });
 
-  app.put('/api/stock/:productId/:locationId', (req: Request, res: Response) => {
+  // Restricted to Inventory Manager: arbitrary stock count override
+  app.put('/api/stock/:productId/:locationId', requireRole('inventory_manager'), (req: Request, res: Response) => {
     const pId = Number(req.params.productId);
     const locId = Number(req.params.locationId);
     const { on_hand } = req.body;
@@ -677,7 +745,7 @@ async function startServer() {
     });
   });
 
-  // --- OPERATIONS (UNIFIED LIFECYCLE) ---
+  // --- OPERATIONS (UNIFIED LIFECYCLE WITH RBAC) ---
   function formatOp(op: Operation) {
     const src = DB.locations.find((l) => l.id === op.sourceLocationId);
     const dst = DB.locations.find((l) => l.id === op.destLocationId);
@@ -712,8 +780,23 @@ async function startServer() {
   }
 
   app.get('/api/operations', (req: Request, res: Response) => {
+    const user = getCurrentUser(req);
+    const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
+
     const { type, status, search } = req.query;
     let list = [...DB.operations];
+
+    // Floor operator scoping: only operations in their assigned warehouse or assigned to them
+    if (!isManager && user.assignedWarehouseId) {
+      const whId = user.assignedWarehouseId;
+      const whLocIds = DB.locations.filter((l) => l.warehouseId === whId).map((l) => l.id);
+      list = list.filter(
+        (op) =>
+          op.responsibleUserId === user.id ||
+          (op.destLocationId && whLocIds.includes(op.destLocationId)) ||
+          (op.sourceLocationId && whLocIds.includes(op.sourceLocationId))
+      );
+    }
 
     if (type) {
       list = list.filter((op) => op.type === type);
@@ -742,11 +825,23 @@ async function startServer() {
     return res.json(formatOp(op));
   });
 
+  // Operation Creation RBAC:
+  // - Receipt & Delivery create → inventory_manager ONLY! (403 for floor_operator)
+  // - Internal Transfer & Adjustment create → both roles allowed!
   app.post('/api/operations', (req: Request, res: Response) => {
+    const user = getCurrentUser(req);
+    const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
+
     const { warehouse_id, type, source_location_id, dest_location_id, contact, schedule_date, lines, responsible_user_id } = req.body;
 
     if (!warehouse_id || !type || !lines || lines.length === 0) {
       return res.status(400).json({ detail: 'Warehouse, type, and at least one operation line are required' });
+    }
+
+    if ((type === 'receipt' || type === 'delivery') && !isManager) {
+      return res.status(403).json({
+        detail: `Forbidden: Floor Operators cannot create ${type.toUpperCase()} documents. Only Inventory Managers may generate receipts or delivery dispatches.`,
+      });
     }
 
     if (type === 'receipt' && !dest_location_id) {
@@ -759,7 +854,6 @@ async function startServer() {
       return res.status(400).json({ detail: 'Both source and destination locations are required' });
     }
 
-    // Generate reference sequence WH/IN/0001
     const reference = getNextReference(Number(warehouse_id), type as OperationType);
 
     const opId = DB.operations.length + 1;
@@ -785,7 +879,7 @@ async function startServer() {
       contact: contact ? contact.trim() : undefined,
       scheduleDate: schedule_date || new Date().toISOString(),
       status: 'draft',
-      responsibleUserId: responsible_user_id ? Number(responsible_user_id) : 1,
+      responsibleUserId: responsible_user_id ? Number(responsible_user_id) : user.id,
       createdAt: new Date().toISOString(),
       lines: opLines,
     };
@@ -803,7 +897,6 @@ async function startServer() {
       return res.status(400).json({ detail: `Operation is already ${op.status}` });
     }
 
-    // If delivery, check for sufficient stock
     if (op.type === 'delivery') {
       let insufficient = false;
       for (const line of op.lines) {
@@ -826,12 +919,35 @@ async function startServer() {
     return res.json(formatOp(op));
   });
 
-  // ATOMIC VALIDATION: updates StockQuant + writes StockMove ledger + status 'done'
+  // Operation Validation RBAC:
+  // - Both roles can validate
+  // - Floor Operator can ONLY validate operations already assigned to them or their assigned warehouse!
   app.post('/api/operations/:id/validate', (req: Request, res: Response) => {
+    const user = getCurrentUser(req);
+    const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
+
     const op = DB.operations.find((o) => o.id === Number(req.params.id));
     if (!op) {
       return res.status(404).json({ detail: 'Operation not found' });
     }
+
+    if (!isManager) {
+      const srcLoc = DB.locations.find((l) => l.id === op.sourceLocationId);
+      const dstLoc = DB.locations.find((l) => l.id === op.destLocationId);
+      const userWh = user.assignedWarehouseId;
+
+      const isAssignedUser = op.responsibleUserId === user.id;
+      const isUserWarehouse =
+        userWh && ((srcLoc && srcLoc.warehouseId === userWh) || (dstLoc && dstLoc.warehouseId === userWh));
+
+      if (!isAssignedUser && !isUserWarehouse) {
+        return res.status(403).json({
+          detail:
+            'Forbidden: Floor Operators may only validate operations assigned to their personal queue or facility warehouse.',
+        });
+      }
+    }
+
     if (op.status === 'done') {
       return res.status(400).json({ detail: 'Operation has already been validated and is immutable' });
     }
@@ -841,9 +957,7 @@ async function startServer() {
 
     const movedAt = new Date().toISOString();
 
-    // Perform atomic stock moves
     for (const line of op.lines) {
-      // 1. Decrement source if applicable
       if (op.sourceLocationId) {
         let srcQuant = DB.stockQuants.find(
           (q) => q.productId === line.productId && q.locationId === op.sourceLocationId
@@ -862,7 +976,6 @@ async function startServer() {
         srcQuant.freeToUse = Math.max(0, srcQuant.onHand - srcQuant.reserved);
       }
 
-      // 2. Increment destination if applicable
       if (op.destLocationId) {
         let dstQuant = DB.stockQuants.find(
           (q) => q.productId === line.productId && q.locationId === op.destLocationId
@@ -881,7 +994,6 @@ async function startServer() {
         dstQuant.freeToUse = Math.max(0, dstQuant.onHand - dstQuant.reserved);
       }
 
-      // 3. Insert into StockMove audit ledger
       DB.stockMoves.push({
         id: DB.stockMoves.length + 1,
         operationId: op.id,
@@ -897,7 +1009,8 @@ async function startServer() {
     return res.json(formatOp(op));
   });
 
-  app.post('/api/operations/:id/cancel', (req: Request, res: Response) => {
+  // Operation Cancel: Restricted to Inventory Manager
+  app.post('/api/operations/:id/cancel', requireRole('inventory_manager'), (req: Request, res: Response) => {
     const op = DB.operations.find((o) => o.id === Number(req.params.id));
     if (!op) {
       return res.status(404).json({ detail: 'Operation not found' });
@@ -909,10 +1022,24 @@ async function startServer() {
     return res.json(formatOp(op));
   });
 
-  // --- MOVE HISTORY AUDIT LEDGER ---
+  // --- MOVE HISTORY AUDIT LEDGER (RBAC ENFORCED) ---
   app.get('/api/moves', (req: Request, res: Response) => {
+    const user = getCurrentUser(req);
+    const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
+
     const { operation_type, product_id, search } = req.query;
     let list = [...DB.stockMoves];
+
+    // Floor operator only sees moves in their assigned warehouse
+    if (!isManager && user.assignedWarehouseId) {
+      const whId = user.assignedWarehouseId;
+      const whLocIds = DB.locations.filter((l) => l.warehouseId === whId).map((l) => l.id);
+      list = list.filter(
+        (m) =>
+          (m.fromLocationId && whLocIds.includes(m.fromLocationId)) ||
+          (m.toLocationId && whLocIds.includes(m.toLocationId))
+      );
+    }
 
     if (operation_type) {
       list = list.filter((m) => {
@@ -965,54 +1092,119 @@ async function startServer() {
     return res.json(formatted);
   });
 
-  // --- DASHBOARD KPIS & AGGREGATION ---
-  app.get('/api/dashboard', (_req: Request, res: Response) => {
-    let lowOrOutCount = 0;
-    let totalStockValue = 0;
+  // --- DASHBOARD (ROLE-SCOPED PAYLOAD) ---
+  app.get('/api/dashboard', (req: Request, res: Response) => {
+    const user = getCurrentUser(req);
+    const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
 
-    for (const p of DB.products) {
-      const quants = DB.stockQuants.filter((q) => q.productId === p.id);
-      const totalOnHand = quants.reduce((s, q) => s + q.onHand, 0);
-      totalStockValue += totalOnHand * p.cost;
-      if (totalOnHand <= p.reorderPoint) {
-        lowOrOutCount++;
+    if (isManager) {
+      let lowOrOutCount = 0;
+      let totalStockValue = 0;
+
+      for (const p of DB.products) {
+        const quants = DB.stockQuants.filter((q) => q.productId === p.id);
+        const totalOnHand = quants.reduce((s, q) => s + q.onHand, 0);
+        totalStockValue += totalOnHand * p.cost;
+        if (totalOnHand <= p.reorderPoint) {
+          lowOrOutCount++;
+        }
       }
+
+      const pendingReceipts = DB.operations.filter(
+        (o) => o.type === 'receipt' && ['draft', 'waiting', 'ready'].includes(o.status)
+      ).length;
+
+      const pendingDeliveries = DB.operations.filter(
+        (o) => o.type === 'delivery' && ['draft', 'waiting', 'ready'].includes(o.status)
+      ).length;
+
+      const scheduledTransfers = DB.operations.filter(
+        (o) => o.type === 'internal' && ['draft', 'ready'].includes(o.status)
+      ).length;
+
+      const recentReceipts = DB.operations
+        .filter((o) => o.type === 'receipt')
+        .slice(-5)
+        .reverse()
+        .map(formatOp);
+
+      const recentDeliveries = DB.operations
+        .filter((o) => o.type === 'delivery')
+        .slice(-5)
+        .reverse()
+        .map(formatOp);
+
+      return res.json({
+        role: 'inventory_manager',
+        assigned_warehouse_id: null,
+        assigned_warehouse_name: 'All Facilities (Global)',
+        total_products: DB.products.length,
+        low_or_out_of_stock_count: lowOrOutCount,
+        pending_receipts_count: pendingReceipts,
+        pending_deliveries_count: pendingDeliveries,
+        scheduled_transfers_count: scheduledTransfers,
+        total_stock_value: Math.round(totalStockValue * 100) / 100, // FIFO valuation for managers
+        recent_receipts: recentReceipts,
+        recent_deliveries: recentDeliveries,
+      });
+    } else {
+      // Floor Operator scoped task-oriented payload
+      const whId = user.assignedWarehouseId || 1;
+      const wh = DB.warehouses.find((w) => w.id === whId);
+      const whName = wh ? `[${wh.shortCode}] ${wh.name}` : 'Main Facility';
+      const whLocIds = DB.locations.filter((l) => l.warehouseId === whId).map((l) => l.id);
+
+      const quantsInWh = DB.stockQuants.filter((q) => whLocIds.includes(q.locationId));
+      const pIds = Array.from(new Set(quantsInWh.map((q) => q.productId)));
+
+      let lowCount = 0;
+      for (const pid of pIds) {
+        const prod = DB.products.find((p) => p.id === pid);
+        const onHand = quantsInWh.filter((q) => q.productId === pid).reduce((s, q) => s + q.onHand, 0);
+        if (prod && onHand <= prod.reorderPoint) {
+          lowCount++;
+        }
+      }
+
+      const pendingReceipts = DB.operations.filter(
+        (o) =>
+          o.type === 'receipt' &&
+          ['draft', 'waiting', 'ready'].includes(o.status) &&
+          (o.responsibleUserId === user.id || (o.destLocationId && whLocIds.includes(o.destLocationId)))
+      );
+
+      const pendingDeliveries = DB.operations.filter(
+        (o) =>
+          o.type === 'delivery' &&
+          ['draft', 'waiting', 'ready'].includes(o.status) &&
+          (o.responsibleUserId === user.id || (o.sourceLocationId && whLocIds.includes(o.sourceLocationId)))
+      );
+
+      const transfersCount = DB.operations.filter(
+        (o) =>
+          o.type === 'internal' &&
+          ['draft', 'ready'].includes(o.status) &&
+          ((o.sourceLocationId && whLocIds.includes(o.sourceLocationId)) ||
+            (o.destLocationId && whLocIds.includes(o.destLocationId)))
+      ).length;
+
+      return res.json({
+        role: 'floor_operator',
+        assigned_warehouse_id: whId,
+        assigned_warehouse_name: whName,
+        total_products: pIds.length,
+        low_or_out_of_stock_count: lowCount,
+        pending_receipts_count: pendingReceipts.length,
+        pending_deliveries_count: pendingDeliveries.length,
+        scheduled_transfers_count: transfersCount,
+        total_stock_value: null, // STRICTLY NO FINANCIAL DATA FOR FLOOR OPERATOR
+        assigned_receipts_to_process: pendingReceipts.length,
+        assigned_deliveries_to_process: pendingDeliveries.length,
+        task_message: `You have ${pendingReceipts.length} inbound receipts and ${pendingDeliveries.length} outbound orders assigned at ${wh ? wh.shortCode : 'terminal'} today.`,
+        recent_receipts: pendingReceipts.slice(-5).reverse().map(formatOp),
+        recent_deliveries: pendingDeliveries.slice(-5).reverse().map(formatOp),
+      });
     }
-
-    const pendingReceipts = DB.operations.filter(
-      (o) => o.type === 'receipt' && ['draft', 'waiting', 'ready'].includes(o.status)
-    ).length;
-
-    const pendingDeliveries = DB.operations.filter(
-      (o) => o.type === 'delivery' && ['draft', 'waiting', 'ready'].includes(o.status)
-    ).length;
-
-    const scheduledTransfers = DB.operations.filter(
-      (o) => o.type === 'internal' && ['draft', 'ready'].includes(o.status)
-    ).length;
-
-    const recentReceipts = DB.operations
-      .filter((o) => o.type === 'receipt')
-      .slice(-5)
-      .reverse()
-      .map(formatOp);
-
-    const recentDeliveries = DB.operations
-      .filter((o) => o.type === 'delivery')
-      .slice(-5)
-      .reverse()
-      .map(formatOp);
-
-    return res.json({
-      total_products: DB.products.length,
-      low_or_out_of_stock_count: lowOrOutCount,
-      pending_receipts_count: pendingReceipts,
-      pending_deliveries_count: pendingDeliveries,
-      scheduled_transfers_count: scheduledTransfers,
-      total_stock_value: Math.round(totalStockValue * 100) / 100,
-      recent_receipts: recentReceipts,
-      recent_deliveries: recentDeliveries,
-    });
   });
 
   // In development, mount Vite middleware

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { StockMove, OperationType } from '../types';
+import { StockMove, OperationType, User } from '../types';
 import { StatusBadge } from './StatusBadge';
 import {
   History,
@@ -12,7 +12,13 @@ import {
   Calendar,
 } from 'lucide-react';
 
-export const MoveHistoryScreen: React.FC = () => {
+interface MoveHistoryScreenProps {
+  currentUser?: User | null;
+}
+
+export const MoveHistoryScreen: React.FC<MoveHistoryScreenProps> = ({ currentUser }) => {
+  const isManager =
+    currentUser?.role === 'inventory_manager' || (currentUser?.role as any) === 'manager';
   const [moves, setMoves] = useState<StockMove[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +66,9 @@ export const MoveHistoryScreen: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-[#8B8478] font-mono mt-1">
-            Immutable physical stock ledger recording every validated unit movement
+            {isManager
+              ? 'Immutable physical stock ledger recording every validated unit movement across all facilities'
+              : `Station Move Ledger — Pre-filtered to physical movements at [${currentUser?.assigned_warehouse_code || 'WH'}] Main Central Facility`}
           </p>
         </div>
 

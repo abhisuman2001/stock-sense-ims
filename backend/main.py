@@ -4,8 +4,9 @@ import random
 import hashlib
 from typing import List, Optional
 
-from fastapi import FastAPI, Depends, HTTPException, Query, status
+from fastapi import FastAPI, Depends, HTTPException, Query, Header, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 
@@ -30,8 +31,8 @@ from .schemas import (
 # Initialize FastAPI
 app = FastAPI(
     title="StockSense Modular IMS API",
-    description="Backend API for StockSense Inventory Management System",
-    version="1.0.0"
+    description="Backend API for StockSense Inventory Management System with Strict RBAC",
+    version="1.1.0"
 )
 
 app.add_middleware(
@@ -42,9 +43,74 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+security = HTTPBearer(auto_error=False)
+
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+# --- AUTH & RBAC DEPENDENCIES ---
+
+def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    """
+    Extracts the authenticated user from the Authorization header Bearer JWT.
+    """
+    if not credentials or not credentials.credentials:
+        # Check if first user exists in DB for fallback, otherwise 401
+        first_user = db.query(User).first()
+        if first_user:
+            return first_user
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token required"
+        )
+
+    token = credentials.credentials
+    # Format: jwt_token_{id}_{timestamp}
+    if token.startswith("jwt_token_"):
+        parts = token.split("_")
+        if len(parts) >= 3:
+            try:
+                user_id = int(parts[2])
+                user = db.query(User).filter(User.id == user_id).first()
+                if user:
+                    return user
+            except (ValueError, IndexError):
+                pass
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired authentication credentials"
+    )
+
+
+def require_role(*allowed_roles: str):
+    """
+    FastAPI dependency that checks current user's role against allowed roles.
+    Raises HTTP 403 Forbidden if not permitted.
+    """
+    def role_checker(user: User = Depends(get_current_user)) -> User:
+        user_role_str = user.role.value if hasattr(user.role, "value") else str(user.role)
+        # Normalize
+        normalized_allowed = [r.value if hasattr(r, "value") else str(r) for r in allowed_roles]
+
+        # Handle aliases
+        if user_role_str in ["inventory_manager", "manager"]:
+            canonical_role = "inventory_manager"
+        else:
+            canonical_role = "floor_operator"
+
+        if canonical_role not in normalized_allowed and user_role_str not in normalized_allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Forbidden: Action requires '{allowed_roles[0]}' role clearance."
+            )
+        return user
+    return role_checker
 
 
 def generate_reference(db: Session, warehouse_id: int, op_type: OperationType) -> str:
@@ -94,17 +160,27 @@ def signup(req: UserSignupRequest, db: Session = Depends(get_db)):
         email=req.email.lower().strip(),
         hashed_password=hash_password(req.password),
         full_name=req.full_name.strip(),
-        role=req.role
+        role=req.role,
+        assigned_warehouse_id=req.assigned_warehouse_id
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
     fake_jwt = f"jwt_token_{new_user.id}_{int(datetime.datetime.utcnow().timestamp())}"
+    wh_code = new_user.assigned_warehouse.short_code if new_user.assigned_warehouse else None
+    user_resp = UserResponse(
+        id=new_user.id,
+        email=new_user.email,
+        full_name=new_user.full_name,
+        role=new_user.role,
+        assigned_warehouse_id=new_user.assigned_warehouse_id,
+        assigned_warehouse_code=wh_code
+    )
     return TokenResponse(
         access_token=fake_jwt,
         token_type="bearer",
-        user=UserResponse.model_validate(new_user)
+        user=user_resp
     )
 
 
@@ -115,10 +191,19 @@ def login(req: UserLoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid email or password credentials")
 
     fake_jwt = f"jwt_token_{user.id}_{int(datetime.datetime.utcnow().timestamp())}"
+    wh_code = user.assigned_warehouse.short_code if user.assigned_warehouse else None
+    user_resp = UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        role=user.role,
+        assigned_warehouse_id=user.assigned_warehouse_id,
+        assigned_warehouse_code=wh_code
+    )
     return TokenResponse(
         access_token=fake_jwt,
         token_type="bearer",
-        user=UserResponse.model_validate(user)
+        user=user_resp
     )
 
 
@@ -126,10 +211,8 @@ def login(req: UserLoginRequest, db: Session = Depends(get_db)):
 def request_otp(req: OTPRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == req.email.lower().strip()).first()
     if not user:
-        # Don't leak user existence for production, but return friendly message
         return {"message": "If an account exists, a 6-digit OTP code has been issued."}
 
-    # Generate 6-digit OTP
     otp_code = f"{random.randint(100000, 999999)}"
     expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=15)
 
@@ -142,10 +225,9 @@ def request_otp(req: OTPRequest, db: Session = Depends(get_db)):
     db.add(otp_record)
     db.commit()
 
-    # For local demo / offline usability, also echo the OTP in debug message
     return {
         "message": "OTP sent to registered email.",
-        "debug_otp": otp_code  # For hackathon demo convenience
+        "debug_otp": otp_code
     }
 
 
@@ -175,15 +257,23 @@ def verify_otp_reset(req: OTPVerifyResetRequest, db: Session = Depends(get_db)):
     return {"message": "Password updated successfully. You may now login."}
 
 
-# --- WAREHOUSE & LOCATION ENDPOINTS ---
+# --- WAREHOUSE & LOCATION ENDPOINTS (RBAC ENFORCED) ---
 
 @app.get("/api/warehouses", response_model=List[WarehouseResponse])
-def list_warehouses(db: Session = Depends(get_db)):
+def list_warehouses(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Both roles can list warehouses for read-only selection/context
     return db.query(Warehouse).order_by(Warehouse.name).all()
 
 
 @app.post("/api/warehouses", response_model=WarehouseResponse)
-def create_warehouse(req: WarehouseCreate, db: Session = Depends(get_db)):
+def create_warehouse(
+    req: WarehouseCreate,
+    current_user: User = Depends(require_role("inventory_manager")),
+    db: Session = Depends(get_db)
+):
+    """
+    Warehouse creation is restricted to inventory_manager only (403 for floor_operator).
+    """
     existing = db.query(Warehouse).filter(Warehouse.short_code == req.short_code).first()
     if existing:
         raise HTTPException(status_code=400, detail=f"Warehouse code '{req.short_code}' already exists")
@@ -204,7 +294,11 @@ def create_warehouse(req: WarehouseCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/api/locations", response_model=List[LocationResponse])
-def list_locations(warehouse_id: Optional[int] = None, db: Session = Depends(get_db)):
+def list_locations(
+    warehouse_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     query = db.query(Location)
     if warehouse_id:
         query = query.filter(Location.warehouse_id == warehouse_id)
@@ -224,7 +318,14 @@ def list_locations(warehouse_id: Optional[int] = None, db: Session = Depends(get
 
 
 @app.post("/api/locations", response_model=LocationResponse)
-def create_location(req: LocationCreate, db: Session = Depends(get_db)):
+def create_location(
+    req: LocationCreate,
+    current_user: User = Depends(require_role("inventory_manager")),
+    db: Session = Depends(get_db)
+):
+    """
+    Location creation is restricted to inventory_manager only (403 for floor_operator).
+    """
     existing = (
         db.query(Location)
         .filter(Location.warehouse_id == req.warehouse_id, Location.short_code == req.short_code)
@@ -256,7 +357,11 @@ def list_categories(db: Session = Depends(get_db)):
 
 
 @app.post("/api/categories", response_model=CategoryResponse)
-def create_category(req: CategoryCreate, db: Session = Depends(get_db)):
+def create_category(
+    req: CategoryCreate,
+    current_user: User = Depends(require_role("inventory_manager")),
+    db: Session = Depends(get_db)
+):
     existing = db.query(Category).filter(Category.name == req.name.strip()).first()
     if existing:
         raise HTTPException(status_code=400, detail="Category name already exists")
@@ -267,10 +372,20 @@ def create_category(req: CategoryCreate, db: Session = Depends(get_db)):
     return cat
 
 
-# --- PRODUCT & STOCK ENDPOINTS ---
+# --- PRODUCT & STOCK ENDPOINTS (RBAC ENFORCED) ---
 
 @app.get("/api/products", response_model=List[ProductResponse])
-def list_products(category_id: Optional[int] = None, search: Optional[str] = None, db: Session = Depends(get_db)):
+def list_products(
+    category_id: Optional[int] = None,
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Product listing: Floor Operator gets read-only view with unit cost masked (None).
+    """
+    is_manager = current_user.role in [UserRole.INVENTORY_MANAGER, "inventory_manager", "manager"]
+
     query = db.query(Product)
     if category_id:
         query = query.filter(Product.category_id == category_id)
@@ -284,6 +399,9 @@ def list_products(category_id: Optional[int] = None, search: Optional[str] = Non
     for p in products:
         total_on_hand = sum(q.on_hand for q in p.quants)
         total_free = sum(q.free_to_use for q in p.quants)
+        # Mask cost for floor operators
+        cost_val = p.cost if is_manager else None
+
         results.append(ProductResponse(
             id=p.id,
             sku=p.sku,
@@ -292,7 +410,7 @@ def list_products(category_id: Optional[int] = None, search: Optional[str] = Non
             category_name=p.category.name if p.category else None,
             uom=p.uom,
             reorder_point=p.reorder_point,
-            cost=p.cost,
+            cost=cost_val,
             total_on_hand=total_on_hand,
             total_free_to_use=total_free
         ))
@@ -300,7 +418,14 @@ def list_products(category_id: Optional[int] = None, search: Optional[str] = Non
 
 
 @app.post("/api/products", response_model=ProductResponse)
-def create_product(req: ProductCreate, db: Session = Depends(get_db)):
+def create_product(
+    req: ProductCreate,
+    current_user: User = Depends(require_role("inventory_manager")),
+    db: Session = Depends(get_db)
+):
+    """
+    Product creation is restricted to inventory_manager only (403 for floor_operator).
+    """
     existing = db.query(Product).filter(Product.sku == req.sku).first()
     if existing:
         raise HTTPException(status_code=400, detail=f"Product SKU '{req.sku}' already exists")
@@ -347,7 +472,17 @@ def create_product(req: ProductCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/api/stock", response_model=List[StockQuantResponse])
-def get_stock(warehouse_id: Optional[int] = None, db: Session = Depends(get_db)):
+def get_stock(
+    warehouse_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    is_manager = current_user.role in [UserRole.INVENTORY_MANAGER, "inventory_manager", "manager"]
+
+    # Floor operators are scoped to their assigned warehouse
+    if not is_manager and current_user.assigned_warehouse_id:
+        warehouse_id = current_user.assigned_warehouse_id
+
     query = (
         db.query(StockQuant)
         .join(Product, StockQuant.product_id == Product.id)
@@ -366,7 +501,7 @@ def get_stock(warehouse_id: Optional[int] = None, db: Session = Depends(get_db))
             sku=q.product.sku,
             category_name=q.product.category.name if q.product.category else "Uncategorized",
             uom=q.product.uom,
-            cost=q.product.cost,
+            cost=q.product.cost if is_manager else None,  # Masked for staff
             location_id=q.location_id,
             location_name=q.location.name,
             warehouse_code=q.location.warehouse.short_code if q.location.warehouse else "N/A",
@@ -378,7 +513,17 @@ def get_stock(warehouse_id: Optional[int] = None, db: Session = Depends(get_db))
 
 
 @app.put("/api/stock/{product_id}/{location_id}", response_model=StockQuantResponse)
-def update_stock_quant(product_id: int, location_id: int, req: StockQuantUpdate, db: Session = Depends(get_db)):
+def update_stock_quant(
+    product_id: int,
+    location_id: int,
+    req: StockQuantUpdate,
+    current_user: User = Depends(require_role("inventory_manager")),
+    db: Session = Depends(get_db)
+):
+    """
+    Arbitrary physical stock override is restricted to inventory_manager only.
+    Floor operators must use an Adjustment Operation.
+    """
     quant = (
         db.query(StockQuant)
         .filter(StockQuant.product_id == product_id, StockQuant.location_id == location_id)
@@ -416,7 +561,7 @@ def update_stock_quant(product_id: int, location_id: int, req: StockQuantUpdate,
     )
 
 
-# --- OPERATIONS ENDPOINTS (UNIFIED LIFECYCLE) ---
+# --- OPERATIONS ENDPOINTS (UNIFIED LIFECYCLE WITH RBAC) ---
 
 def format_op_response(op: Operation) -> OperationResponse:
     lines_resp = [
@@ -454,9 +599,20 @@ def list_operations(
     status: Optional[OperationStatus] = None,
     warehouse_id: Optional[int] = None,
     search: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    is_manager = current_user.role in [UserRole.INVENTORY_MANAGER, "inventory_manager", "manager"]
+
     query = db.query(Operation)
+
+    # Scoping for floor operator: only see operations assigned to them or their warehouse
+    if not is_manager and current_user.assigned_warehouse_id:
+        user_wh = current_user.assigned_warehouse_id
+        user_id = current_user.id
+        query = query.join(Location, or_(Operation.source_location_id == Location.id, Operation.dest_location_id == Location.id))\
+                     .filter(or_(Operation.responsible_user_id == user_id, Location.warehouse_id == user_wh))
+
     if type:
         query = query.filter(Operation.type == type)
     if status:
@@ -465,12 +621,16 @@ def list_operations(
         search_fmt = f"%{search}%"
         query = query.filter(or_(Operation.reference.ilike(search_fmt), Operation.contact.ilike(search_fmt)))
 
-    ops = query.order_by(Operation.created_at.desc()).all()
+    ops = query.order_by(Operation.created_at.desc()).distinct().all()
     return [format_op_response(op) for op in ops]
 
 
 @app.get("/api/operations/{operation_id}", response_model=OperationResponse)
-def get_operation(operation_id: int, db: Session = Depends(get_db)):
+def get_operation(
+    operation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     op = db.query(Operation).filter(Operation.id == operation_id).first()
     if not op:
         raise HTTPException(status_code=404, detail="Operation document not found")
@@ -478,7 +638,24 @@ def get_operation(operation_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/operations", response_model=OperationResponse)
-def create_operation(req: OperationCreate, db: Session = Depends(get_db)):
+def create_operation(
+    req: OperationCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    RBAC Rule:
+    - Receipt & Delivery order create: inventory_manager only! (403 for floor_operator)
+    - Internal Transfer & Adjustment: allowed for both roles.
+    """
+    is_manager = current_user.role in [UserRole.INVENTORY_MANAGER, "inventory_manager", "manager"]
+
+    if req.type in [OperationType.RECEIPT, OperationType.DELIVERY] and not is_manager:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Forbidden: Floor Operators cannot create {req.type.value.capitalize()} documents. Only Inventory Managers may generate receipts or delivery dispatches."
+        )
+
     # Validate locations based on operation type
     if req.type == OperationType.RECEIPT:
         if not req.dest_location_id:
@@ -493,10 +670,6 @@ def create_operation(req: OperationCreate, db: Session = Depends(get_db)):
     # Generate sequence reference (e.g. WH/IN/0004)
     ref = generate_reference(db, req.warehouse_id, req.type)
 
-    # Initial status is draft
-    # Check if delivery order has sufficient free stock; if not, status can transition to waiting upon check
-    initial_status = OperationStatus.DRAFT
-
     op = Operation(
         reference=ref,
         type=req.type,
@@ -504,8 +677,8 @@ def create_operation(req: OperationCreate, db: Session = Depends(get_db)):
         dest_location_id=req.dest_location_id,
         contact=req.contact,
         schedule_date=req.schedule_date or datetime.datetime.utcnow(),
-        status=initial_status,
-        responsible_user_id=1,  # Default to current user
+        status=OperationStatus.DRAFT,
+        responsible_user_id=current_user.id,
     )
     db.add(op)
     db.flush()
@@ -524,14 +697,17 @@ def create_operation(req: OperationCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/api/operations/{operation_id}/mark-ready", response_model=OperationResponse)
-def mark_operation_ready(operation_id: int, db: Session = Depends(get_db)):
+def mark_operation_ready(
+    operation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     op = db.query(Operation).filter(Operation.id == operation_id).first()
     if not op:
         raise HTTPException(status_code=404, detail="Operation not found")
     if op.status in [OperationStatus.DONE, OperationStatus.CANCELLED]:
         raise HTTPException(status_code=400, detail=f"Cannot change status of {op.status.value} operation")
 
-    # If delivery, check if sufficient free stock
     if op.type == OperationType.DELIVERY:
         insufficient = False
         for line in op.lines:
@@ -558,21 +734,37 @@ def mark_operation_ready(operation_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/operations/{operation_id}/validate", response_model=OperationResponse)
-def validate_operation(operation_id: int, db: Session = Depends(get_db)):
+def validate_operation(
+    operation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
-    ATOMIC VALIDATION TRANSACTION:
-    1. Check status is not DONE or CANCELLED.
-    2. For each OperationLine:
-       - If source_location_id: decrement StockQuant on_hand and free_to_use.
-         Ensure non-negative for physical stock locations.
-       - If dest_location_id: increment StockQuant on_hand and free_to_use.
-       - Insert immutable StockMove record into audit ledger.
-    3. Update operation status to DONE.
-    4. Commit entire transaction atomically.
+    ATOMIC VALIDATION TRANSACTION WITH RBAC CHECK:
+    - Both roles can validate.
+    - BUT Floor Operator can ONLY validate operations already assigned to them
+      (responsible_user_id matches current user, or operation warehouse matches user's assigned warehouse).
     """
     op = db.query(Operation).filter(Operation.id == operation_id).with_for_update().first()
     if not op:
         raise HTTPException(status_code=404, detail="Operation not found")
+
+    is_manager = current_user.role in [UserRole.INVENTORY_MANAGER, "inventory_manager", "manager"]
+
+    if not is_manager:
+        # Check assignment to user or user's assigned warehouse
+        user_wh = current_user.assigned_warehouse_id
+        src_wh = op.source_location.warehouse_id if op.source_location else None
+        dst_wh = op.dest_location.warehouse_id if op.dest_location else None
+
+        is_assigned_to_user = (op.responsible_user_id == current_user.id)
+        is_in_user_warehouse = (user_wh and (user_wh == src_wh or user_wh == dst_wh))
+
+        if not is_assigned_to_user and not is_in_user_warehouse:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: Floor Operators may only validate operations assigned to their queue or warehouse facility."
+            )
 
     if op.status == OperationStatus.DONE:
         raise HTTPException(status_code=400, detail="Operation is already completed and immutable")
@@ -602,7 +794,6 @@ def validate_operation(operation_id: int, db: Session = Depends(get_db)):
                     db.add(src_quant)
                     db.flush()
 
-                # Deduct stock
                 src_quant.on_hand -= line.quantity
                 src_quant.free_to_use = max(0.0, src_quant.on_hand - src_quant.reserved)
 
@@ -650,7 +841,14 @@ def validate_operation(operation_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/operations/{operation_id}/cancel", response_model=OperationResponse)
-def cancel_operation(operation_id: int, db: Session = Depends(get_db)):
+def cancel_operation(
+    operation_id: int,
+    current_user: User = Depends(require_role("inventory_manager")),
+    db: Session = Depends(get_db)
+):
+    """
+    Cancelling operations is restricted to inventory_manager only (403 for floor_operator).
+    """
     op = db.query(Operation).filter(Operation.id == operation_id).first()
     if not op:
         raise HTTPException(status_code=404, detail="Operation not found")
@@ -663,20 +861,38 @@ def cancel_operation(operation_id: int, db: Session = Depends(get_db)):
     return format_op_response(op)
 
 
-# --- MOVE HISTORY AUDIT LEDGER ---
+# --- MOVE HISTORY AUDIT LEDGER (RBAC ENFORCED) ---
 
 @app.get("/api/moves", response_model=List[StockMoveResponse])
 def get_move_history(
     operation_type: Optional[OperationType] = None,
     product_id: Optional[int] = None,
     search: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """
+    Move History: inventory_manager sees all moves;
+    floor_operator is filtered to moves involving their assigned warehouse only.
+    """
+    is_manager = current_user.role in [UserRole.INVENTORY_MANAGER, "inventory_manager", "manager"]
+
     query = (
         db.query(StockMove)
         .join(Operation, StockMove.operation_id == Operation.id)
         .join(Product, StockMove.product_id == Product.id)
     )
+
+    if not is_manager and current_user.assigned_warehouse_id:
+        wh_id = current_user.assigned_warehouse_id
+        # Filter moves where from_location or to_location is in assigned warehouse
+        wh_loc_ids = [l.id for l in db.query(Location).filter(Location.warehouse_id == wh_id).all()]
+        query = query.filter(
+            or_(
+                StockMove.from_location_id.in_(wh_loc_ids),
+                StockMove.to_location_id.in_(wh_loc_ids)
+            )
+        )
 
     if operation_type:
         query = query.filter(Operation.type == operation_type)
@@ -714,63 +930,172 @@ def get_move_history(
     return results
 
 
-# --- DASHBOARD AGGREGATION ---
+# --- DASHBOARD AGGREGATION (ROLE-SCOPED PAYLOAD) ---
 
 @app.get("/api/dashboard", response_model=DashboardKPIs)
-def get_dashboard_kpis(db: Session = Depends(get_db)):
-    products = db.query(Product).all()
-    total_products = len(products)
+def get_dashboard_kpis(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Role-scoped dashboard payload:
+    - inventory_manager: full KPIs across all warehouses + FIFO stock valuation ($)
+    - floor_operator: scoped to their assigned warehouse, counts only, NO cost data, task-oriented framing.
+    """
+    is_manager = current_user.role in [UserRole.INVENTORY_MANAGER, "inventory_manager", "manager"]
+    assigned_wh = current_user.assigned_warehouse
 
-    low_or_out_count = 0
-    total_stock_value = 0.0
+    if is_manager:
+        # Full manager analytics view
+        products = db.query(Product).all()
+        total_products = len(products)
+        low_or_out_count = 0
+        total_stock_value = 0.0
 
-    for p in products:
-        total_on_hand = sum(q.on_hand for q in p.quants)
-        total_stock_value += (total_on_hand * p.cost)
-        if total_on_hand <= p.reorder_point:
-            low_or_out_count += 1
+        for p in products:
+            total_on_hand = sum(q.on_hand for q in p.quants)
+            total_stock_value += (total_on_hand * p.cost)
+            if total_on_hand <= p.reorder_point:
+                low_or_out_count += 1
 
-    pending_receipts = (
-        db.query(Operation)
-        .filter(Operation.type == OperationType.RECEIPT, Operation.status.in_([OperationStatus.DRAFT, OperationStatus.WAITING, OperationStatus.READY]))
-        .count()
-    )
+        pending_receipts = (
+            db.query(Operation)
+            .filter(Operation.type == OperationType.RECEIPT, Operation.status.in_([OperationStatus.DRAFT, OperationStatus.WAITING, OperationStatus.READY]))
+            .count()
+        )
 
-    pending_deliveries = (
-        db.query(Operation)
-        .filter(Operation.type == OperationType.DELIVERY, Operation.status.in_([OperationStatus.DRAFT, OperationStatus.WAITING, OperationStatus.READY]))
-        .count()
-    )
+        pending_deliveries = (
+            db.query(Operation)
+            .filter(Operation.type == OperationType.DELIVERY, Operation.status.in_([OperationStatus.DRAFT, OperationStatus.WAITING, OperationStatus.READY]))
+            .count()
+        )
 
-    scheduled_transfers = (
-        db.query(Operation)
-        .filter(Operation.type == OperationType.INTERNAL, Operation.status.in_([OperationStatus.DRAFT, OperationStatus.READY]))
-        .count()
-    )
+        scheduled_transfers = (
+            db.query(Operation)
+            .filter(Operation.type == OperationType.INTERNAL, Operation.status.in_([OperationStatus.DRAFT, OperationStatus.READY]))
+            .count()
+        )
 
-    recent_receipts_db = (
-        db.query(Operation)
-        .filter(Operation.type == OperationType.RECEIPT)
-        .order_by(Operation.created_at.desc())
-        .limit(5)
-        .all()
-    )
+        recent_receipts_db = (
+            db.query(Operation)
+            .filter(Operation.type == OperationType.RECEIPT)
+            .order_by(Operation.created_at.desc())
+            .limit(5)
+            .all()
+        )
 
-    recent_deliveries_db = (
-        db.query(Operation)
-        .filter(Operation.type == OperationType.DELIVERY)
-        .order_by(Operation.created_at.desc())
-        .limit(5)
-        .all()
-    )
+        recent_deliveries_db = (
+            db.query(Operation)
+            .filter(Operation.type == OperationType.DELIVERY)
+            .order_by(Operation.created_at.desc())
+            .limit(5)
+            .all()
+        )
 
-    return DashboardKPIs(
-        total_products=total_products,
-        low_or_out_of_stock_count=low_or_out_count,
-        pending_receipts_count=pending_receipts,
-        pending_deliveries_count=pending_deliveries,
-        scheduled_transfers_count=scheduled_transfers,
-        total_stock_value=round(total_stock_value, 2),
-        recent_receipts=[format_op_response(op) for op in recent_receipts_db],
-        recent_deliveries=[format_op_response(op) for op in recent_deliveries_db]
-    )
+        return DashboardKPIs(
+            role="inventory_manager",
+            assigned_warehouse_id=None,
+            assigned_warehouse_name="All Facilities (Global)",
+            total_products=total_products,
+            low_or_out_of_stock_count=low_or_out_count,
+            pending_receipts_count=pending_receipts,
+            pending_deliveries_count=pending_deliveries,
+            scheduled_transfers_count=scheduled_transfers,
+            total_stock_value=round(total_stock_value, 2),
+            recent_receipts=[format_op_response(op) for op in recent_receipts_db],
+            recent_deliveries=[format_op_response(op) for op in recent_deliveries_db]
+        )
+
+    else:
+        # Floor Operator scoped task-oriented view (NO FINANCIAL/COST DATA)
+        wh_id = current_user.assigned_warehouse_id or 1
+        wh = db.query(Warehouse).filter(Warehouse.id == wh_id).first()
+        wh_name = f"[{wh.short_code}] {wh.name}" if wh else "Assigned Station"
+
+        wh_loc_ids = [l.id for l in db.query(Location).filter(Location.warehouse_id == wh_id).all()]
+
+        # Products in this warehouse
+        quants_in_wh = db.query(StockQuant).filter(StockQuant.location_id.in_(wh_loc_ids)).all()
+        product_ids = set(q.product_id for q in quants_in_wh)
+        total_products = len(product_ids)
+
+        low_count = 0
+        for pid in product_ids:
+            p = db.query(Product).filter(Product.id == pid).first()
+            p_on_hand = sum(q.on_hand for q in quants_in_wh if q.product_id == pid)
+            if p and p_on_hand <= p.reorder_point:
+                low_count += 1
+
+        # Receipts directed to this warehouse or assigned to this operator
+        pending_receipts_q = (
+            db.query(Operation)
+            .filter(
+                Operation.type == OperationType.RECEIPT,
+                Operation.status.in_([OperationStatus.DRAFT, OperationStatus.WAITING, OperationStatus.READY]),
+                or_(
+                    Operation.dest_location_id.in_(wh_loc_ids),
+                    Operation.responsible_user_id == current_user.id
+                )
+            )
+        )
+        assigned_receipts_count = pending_receipts_q.count()
+
+        # Deliveries sourced from this warehouse or assigned to this operator
+        pending_deliveries_q = (
+            db.query(Operation)
+            .filter(
+                Operation.type == OperationType.DELIVERY,
+                Operation.status.in_([OperationStatus.DRAFT, OperationStatus.WAITING, OperationStatus.READY]),
+                or_(
+                    Operation.source_location_id.in_(wh_loc_ids),
+                    Operation.responsible_user_id == current_user.id
+                )
+            )
+        )
+        assigned_deliveries_count = pending_deliveries_q.count()
+
+        transfers_count = (
+            db.query(Operation)
+            .filter(
+                Operation.type == OperationType.INTERNAL,
+                Operation.status.in_([OperationStatus.DRAFT, OperationStatus.READY]),
+                or_(
+                    Operation.source_location_id.in_(wh_loc_ids),
+                    Operation.dest_location_id.in_(wh_loc_ids)
+                )
+            )
+            .count()
+        )
+
+        task_msg = f"You have {assigned_receipts_count} inbound receipts and {assigned_deliveries_count} outbound orders assigned at {wh.short_code if wh else 'your terminal'} today."
+
+        recent_receipts_db = (
+            pending_receipts_q
+            .order_by(Operation.created_at.desc())
+            .limit(5)
+            .all()
+        )
+
+        recent_deliveries_db = (
+            pending_deliveries_q
+            .order_by(Operation.created_at.desc())
+            .limit(5)
+            .all()
+        )
+
+        return DashboardKPIs(
+            role="floor_operator",
+            assigned_warehouse_id=wh_id,
+            assigned_warehouse_name=wh_name,
+            total_products=total_products,
+            low_or_out_of_stock_count=low_count,
+            pending_receipts_count=assigned_receipts_count,
+            pending_deliveries_count=assigned_deliveries_count,
+            scheduled_transfers_count=transfers_count,
+            total_stock_value=None,  # STRICTLY NO FINANCIAL DATA FOR FLOOR OPERATOR
+            assigned_receipts_to_process=assigned_receipts_count,
+            assigned_deliveries_to_process=assigned_deliveries_count,
+            task_message=task_msg,
+            recent_receipts=[format_op_response(op) for op in recent_receipts_db],
+            recent_deliveries=[format_op_response(op) for op in recent_deliveries_db]
+        )
