@@ -469,7 +469,7 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
 
       {/* VIEW 2: KANBAN BOARD */}
       {viewMode === 'kanban' && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {kanbanColumns.map((st) => {
             const colOps = operations.filter((o) => o.status === st);
             return (
@@ -520,8 +520,8 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
 
       {/* DETAIL MODAL / DRAWER */}
       {activeOp && (
-        <div className="fixed inset-0 z-50 bg-[rgba(26,24,22,0.85)] flex items-center justify-center p-4">
-          <div className="bg-[#262420] border border-[#34312B] max-w-2xl w-full p-6 shadow-none max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-[rgba(26,24,22,0.85)] flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[#262420] border border-[#34312B] max-w-2xl w-full p-4 sm:p-6 shadow-none max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-start justify-between pb-4 border-b border-[#34312B] mb-4">
               <div>
@@ -734,8 +734,8 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
 
       {/* CREATE OPERATION MODAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-[rgba(26,24,22,0.85)] flex items-center justify-center p-4">
-          <div className="bg-[#262420] border border-[#34312B] max-w-xl w-full p-6 shadow-none max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-[rgba(26,24,22,0.85)] flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[#262420] border border-[#34312B] max-w-xl w-full p-4 sm:p-6 shadow-none max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-[#34312B] mb-4">
               <h2 className="text-sm font-bold uppercase tracking-wider text-[#F5F3EF]">
                 New {type.toUpperCase()} Document
@@ -749,7 +749,7 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
             </div>
 
             <form onSubmit={handleCreateOperation} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-mono uppercase text-[#8B8478] mb-1">
                     Warehouse Facility *

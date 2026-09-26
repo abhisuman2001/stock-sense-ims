@@ -123,7 +123,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ currentUser }) =
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center flex-wrap gap-2">
           <button
             onClick={loadData}
             title="Refresh"
