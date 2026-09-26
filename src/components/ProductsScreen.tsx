@@ -18,6 +18,7 @@ import {
   Barcode,
   Scan,
   QrCode,
+  Download,
 } from 'lucide-react';
 
 interface ProductsScreenProps {
@@ -28,7 +29,7 @@ interface ProductsScreenProps {
 
 export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitchSubTab, currentUser }) => {
   const isManager =
-    currentUser?.role === 'inventory_manager' || (currentUser?.role as any) === 'manager';
+    !currentUser || currentUser?.role === 'inventory_manager' || (currentUser?.role as any) === 'manager';
   const [products, setProducts] = useState<Product[]>([]);
   const [stockQuants, setStockQuants] = useState<StockQuant[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -215,6 +216,152 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
     }
   };
 
+  // Safe CSV cell escaping to prevent delimiter collisions and formula injection
+  const escapeCsvCell = (val: any): string => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val);
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return `"${str}"`;
+  };
+
+  const handleExportCSV = () => {
+    try {
+      if (subTab === 'stock') {
+        // Export physical stock ledger breakdown
+        const filteredQuants = stockQuants.filter((q) => {
+          const matchesSearch =
+            !search ||
+            q.product_name.toLowerCase().includes(search.toLowerCase()) ||
+            q.sku.toLowerCase().includes(search.toLowerCase());
+          return matchesSearch;
+        });
+
+        if (filteredQuants.length === 0) {
+          setError('No physical stock records available to export with current filters.');
+          setTimeout(() => setError(null), 3500);
+          return;
+        }
+
+        const headers = [
+          'Warehouse Code',
+          'Location Name',
+          'SKU',
+          'Product Name',
+          'Category',
+          'UoM',
+          'On Hand Quantity',
+          'Reserved Quantity',
+          'Free to Use Quantity',
+          'Unit Cost (USD)',
+          'Total Location Value (USD)',
+        ];
+
+        const rows = filteredQuants.map((q) => {
+          const unitCost = q.cost !== null && q.cost !== undefined ? q.cost : 0;
+          const locValue = (unitCost * q.on_hand).toFixed(2);
+          return [
+            q.warehouse_code,
+            q.location_name,
+            q.sku,
+            q.product_name,
+            q.category_name || 'General',
+            q.uom,
+            q.on_hand.toString(),
+            q.reserved.toString(),
+            q.free_to_use.toString(),
+            unitCost.toFixed(2),
+            locValue,
+          ].map(escapeCsvCell).join(',');
+        });
+
+        const csvContent = '\uFEFF' + [headers.map(escapeCsvCell).join(','), ...rows].join('\r\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const dateStr = new Date().toISOString().slice(0, 10);
+        link.href = url;
+        link.download = `stocksense_stock_ledger_${dateStr}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        setFeedbackMsg(`Successfully exported ${filteredQuants.length} stock ledger records to CSV.`);
+        setTimeout(() => setFeedbackMsg(null), 3500);
+        return;
+      }
+
+      // Catalog view: Export Product Catalog
+      const itemsToExport = products.filter(
+        (p) => !showLowStockOnly || p.total_on_hand <= p.reorder_point
+      );
+
+      if (itemsToExport.length === 0) {
+        setError('No catalog items available to export with current filters.');
+        setTimeout(() => setError(null), 3500);
+        return;
+      }
+
+      const headers = [
+        'SKU',
+        'Item Description',
+        'Category',
+        'Unit of Measure',
+        'Unit Cost (USD)',
+        'Reorder Threshold',
+        'Total On Hand',
+        'Free to Use',
+        'Inventory Valuation (USD)',
+        'Stock Status',
+      ];
+
+      const rows = itemsToExport.map((p) => {
+        const isCritical = p.total_on_hand === 0;
+        const isLow = p.total_on_hand <= p.reorder_point;
+        const status = isCritical
+          ? 'CRITICAL_OUT_OF_STOCK'
+          : isLow
+          ? 'LOW_STOCK_BREACH'
+          : 'HEALTHY';
+        const unitCost = p.cost !== null && p.cost !== undefined ? p.cost : 0;
+        const valuation = (unitCost * p.total_on_hand).toFixed(2);
+
+        return [
+          p.sku,
+          p.name,
+          p.category_name || 'Unassigned',
+          p.uom,
+          unitCost.toFixed(2),
+          p.reorder_point.toFixed(1),
+          p.total_on_hand.toFixed(1),
+          p.total_free_to_use.toFixed(1),
+          valuation,
+          status,
+        ].map(escapeCsvCell).join(',');
+      });
+
+      const csvContent = '\uFEFF' + [headers.map(escapeCsvCell).join(','), ...rows].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `stocksense_inventory_catalog_${dateStr}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setFeedbackMsg(`Successfully exported ${itemsToExport.length} product catalog records to CSV.`);
+      setTimeout(() => setFeedbackMsg(null), 3500);
+    } catch (err: any) {
+      setError('Failed to generate CSV export: ' + (err.message || 'Unknown error'));
+      setTimeout(() => setError(null), 4000);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -246,6 +393,19 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
             <span className="hidden sm:inline">Scan Barcode / SKU</span>
             <span className="sm:hidden">Scan</span>
           </button>
+
+          {/* Export to CSV Button */}
+          {isManager && (
+            <button
+              onClick={handleExportCSV}
+              className="bg-[#262420] hover:bg-[#34312B] border border-[#34312B] hover:border-[#F2C230] text-[#F5F3EF] hover:text-[#F2C230] text-xs font-mono font-medium py-2 px-3 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title={subTab === 'catalog' ? 'Export current inventory catalog to CSV for reporting' : 'Export physical stock ledger to CSV for reporting'}
+            >
+              <Download className="w-4 h-4 text-[#F2C230]" />
+              <span className="hidden sm:inline">Export to CSV</span>
+              <span className="sm:hidden">Export</span>
+            </button>
+          )}
 
           <button
             onClick={loadData}
