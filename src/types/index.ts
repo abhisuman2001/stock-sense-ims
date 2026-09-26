@@ -118,3 +118,40 @@ export interface DashboardKPIs {
   recent_receipts: Operation[];
   recent_deliveries: Operation[];
 }
+
+export type AlertSeverity = 'critical' | 'warning' | 'watchlist';
+export type AlertType = 'stockout' | 'reorder_breach' | 'low_buffer';
+
+export interface SmartAlert {
+  id: string;
+  product_id: number;
+  sku: string;
+  name: string;
+  category_id: number | null;
+  category_name: string | null;
+  uom: string;
+  reorder_point: number;
+  total_on_hand: number;
+  shortfall: number;
+  severity: AlertSeverity;
+  type: AlertType;
+  inbound_in_progress: {
+    operation_id: number;
+    reference: string;
+    quantity: number;
+    status: string;
+  } | null;
+}
+
+export interface SmartAlertsResponse {
+  summary: {
+    total_urgent: number;
+    stockouts_count: number;
+    reorder_breaches_count: number;
+    watchlist_count: number;
+    total_shortfall_units: number;
+  };
+  alerts: SmartAlert[];
+  last_scanned_at: string;
+}
+

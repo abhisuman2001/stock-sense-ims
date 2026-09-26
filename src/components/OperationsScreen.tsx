@@ -41,6 +41,8 @@ interface OperationsScreenProps {
   onClearSelectedOpFromDashboard?: () => void;
   currentUser: User | null;
   onStockUpdated?: () => void;
+  initialReplenishProduct?: { id: number; sku: string } | null;
+  onClearInitialReplenishProduct?: () => void;
 }
 
 export const OperationsScreen: React.FC<OperationsScreenProps> = ({
@@ -49,6 +51,8 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
   onClearSelectedOpFromDashboard,
   currentUser,
   onStockUpdated,
+  initialReplenishProduct,
+  onClearInitialReplenishProduct,
 }) => {
   const [operations, setOperations] = useState<Operation[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -79,6 +83,17 @@ export const OperationsScreen: React.FC<OperationsScreenProps> = ({
     { product_id: 1, quantity: 10 },
   ]);
   const [creating, setCreating] = useState(false);
+
+  // React to initialReplenishProduct from Smart Alerts
+  useEffect(() => {
+    if (initialReplenishProduct) {
+      setLines([{ product_id: initialReplenishProduct.id, quantity: 20 }]);
+      setShowCreateModal(true);
+      if (onClearInitialReplenishProduct) {
+        onClearInitialReplenishProduct();
+      }
+    }
+  }, [initialReplenishProduct]);
 
   // Printable document preview state
   const [showPrintModal, setShowPrintModal] = useState(false);

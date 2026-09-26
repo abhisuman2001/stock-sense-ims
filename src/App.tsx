@@ -35,6 +35,10 @@ export default function App() {
   // Cross-view state (opening a specific operation from dashboard)
   const [selectedOpFromDashboard, setSelectedOpFromDashboard] = useState<Operation | null>(null);
 
+  // Cross-view state from Smart Alerts
+  const [initialSearchSku, setInitialSearchSku] = useState<string | null>(null);
+  const [initialReplenishProduct, setInitialReplenishProduct] = useState<{ id: number; sku: string } | null>(null);
+
   // Signal counter to trigger re-fetches across views
   const [stockUpdateCounter, setStockUpdateCounter] = useState(0);
 
@@ -104,6 +108,17 @@ export default function App() {
         onSelectProductsSubTab={setProductsSubTab}
         user={currentUser}
         onLogout={handleLogout}
+        stockUpdateCounter={stockUpdateCounter}
+        onNavigateToCatalogWithSku={(sku) => {
+          setProductsSubTab('catalog');
+          setInitialSearchSku(sku);
+          setCurrentTab('products');
+        }}
+        onNavigateToReplenish={(productId, sku) => {
+          setOperationsSubTab('receipts');
+          setInitialReplenishProduct({ id: productId, sku });
+          setCurrentTab('operations');
+        }}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -133,6 +148,8 @@ export default function App() {
             onClearSelectedOpFromDashboard={() => setSelectedOpFromDashboard(null)}
             currentUser={currentUser}
             onStockUpdated={() => setStockUpdateCounter((c) => c + 1)}
+            initialReplenishProduct={initialReplenishProduct}
+            onClearInitialReplenishProduct={() => setInitialReplenishProduct(null)}
           />
         )}
 
@@ -142,6 +159,8 @@ export default function App() {
             subTab={productsSubTab}
             onSwitchSubTab={setProductsSubTab}
             currentUser={currentUser}
+            initialSearchSku={initialSearchSku}
+            onClearInitialSearchSku={() => setInitialSearchSku(null)}
           />
         )}
 

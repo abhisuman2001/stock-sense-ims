@@ -29,9 +29,17 @@ interface ProductsScreenProps {
   subTab: 'catalog' | 'stock';
   onSwitchSubTab: (tab: 'catalog' | 'stock') => void;
   currentUser?: User | null;
+  initialSearchSku?: string | null;
+  onClearInitialSearchSku?: () => void;
 }
 
-export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitchSubTab, currentUser }) => {
+export const ProductsScreen: React.FC<ProductsScreenProps> = ({
+  subTab,
+  onSwitchSubTab,
+  currentUser,
+  initialSearchSku,
+  onClearInitialSearchSku,
+}) => {
   const isManager =
     !currentUser || currentUser?.role === 'inventory_manager' || (currentUser?.role as any) === 'manager';
   const [products, setProducts] = useState<Product[]>([]);
@@ -49,6 +57,17 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({ subTab, onSwitch
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('');
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+
+  // React to initialSearchSku from Smart Alerts
+  useEffect(() => {
+    if (initialSearchSku) {
+      setSearch(initialSearchSku);
+      setShowLowStockOnly(false);
+      if (onClearInitialSearchSku) {
+        onClearInitialSearchSku();
+      }
+    }
+  }, [initialSearchSku]);
 
   // Inline Stock Editing state: { key: `${productId}_${locationId}`, value: number }
   const [editingQuantKey, setEditingQuantKey] = useState<string | null>(null);

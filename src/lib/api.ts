@@ -8,6 +8,7 @@ import {
   Location,
   Category,
   User,
+  SmartAlertsResponse,
 } from '../types';
 
 export const API_BASE = '/api';
@@ -164,4 +165,7 @@ export const api = {
     const qs = sp.toString() ? `?${sp.toString()}` : '';
     return request<StockMove[]>(`/moves${qs}`);
   },
+
+  // Smart Alerts
+  getSmartAlerts: () => request<SmartAlertsResponse>('/smart-alerts'),
 };

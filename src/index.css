@@ -192,3 +192,25 @@ html.light .stocksense-logo-subtitle {
   color: #5C5549 !important;
 }
 
+/* Smart Alerts light mode card backgrounds */
+html.light .bg-\[\#221B1B\] {
+  background-color: #FDF2F2 !important;
+}
+
+html.light .bg-\[\#221F18\] {
+  background-color: #FFFBEB !important;
+}
+
+html.light .bg-\[\#1C2026\] {
+  background-color: #F0F7FF !important;
+}
+
+html.light .bg-\[\#1D1B18\] {
+  background-color: #F3EFE8 !important;
+}
+
+html.light .bg-\[\#261E1E\] {
+  background-color: #FEE2E2 !important;
+}
+
+

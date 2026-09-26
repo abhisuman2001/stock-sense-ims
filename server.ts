@@ -1207,6 +1207,149 @@ async function startServer() {
     }
   });
 
+  // --- SMART ALERTS (INVENTORY ANOMALIES & THRESHOLD BREACHES) ---
+  app.get('/api/smart-alerts', (req: Request, res: Response) => {
+    const user = getCurrentUser(req);
+    const isManager = user.role === 'inventory_manager' || (user.role as any) === 'manager';
+    const whId = user.assignedWarehouseId;
+
+    const targetProducts = DB.products;
+    const whLocIds =
+      !isManager && whId
+        ? DB.locations.filter((l) => l.warehouseId === whId).map((l) => l.id)
+        : null;
+
+    // Track active inbound receipts to know what's already being replenished
+    const activeReceipts = DB.operations.filter(
+      (o) => o.type === 'receipt' && ['draft', 'waiting', 'ready'].includes(o.status)
+    );
+
+    const alerts: Array<{
+      id: string;
+      product_id: number;
+      sku: string;
+      name: string;
+      category_id: number | null;
+      category_name: string | null;
+      uom: string;
+      reorder_point: number;
+      total_on_hand: number;
+      shortfall: number;
+      severity: 'critical' | 'warning' | 'watchlist';
+      type: 'stockout' | 'reorder_breach' | 'low_buffer';
+      inbound_in_progress: {
+        operation_id: number;
+        reference: string;
+        quantity: number;
+        status: string;
+      } | null;
+    }> = [];
+
+    for (const p of targetProducts) {
+      const quants = DB.stockQuants.filter((q) => {
+        if (q.productId !== p.id) return false;
+        if (whLocIds && !whLocIds.includes(q.locationId)) return false;
+        return true;
+      });
+
+      const totalOnHand = quants.reduce((s, q) => s + q.onHand, 0);
+      const reorderPoint = p.reorderPoint;
+      const cat = DB.categories.find((c) => c.id === p.categoryId);
+
+      // Check for incoming stock on pending receipts
+      let incomingInfo: { operation_id: number; reference: string; quantity: number; status: string } | null = null;
+      for (const op of activeReceipts) {
+        const line = op.lines.find((l) => l.productId === p.id);
+        if (line) {
+          incomingInfo = {
+            operation_id: op.id,
+            reference: op.reference,
+            quantity: line.quantity,
+            status: op.status,
+          };
+          break;
+        }
+      }
+
+      if (totalOnHand <= 0) {
+        alerts.push({
+          id: `alert-stockout-${p.id}`,
+          product_id: p.id,
+          sku: p.sku,
+          name: p.name,
+          category_id: p.categoryId,
+          category_name: cat ? cat.name : null,
+          uom: p.uom,
+          reorder_point: reorderPoint,
+          total_on_hand: totalOnHand,
+          shortfall: reorderPoint - totalOnHand,
+          severity: 'critical',
+          type: 'stockout',
+          inbound_in_progress: incomingInfo,
+        });
+      } else if (totalOnHand <= reorderPoint) {
+        alerts.push({
+          id: `alert-reorder-${p.id}`,
+          product_id: p.id,
+          sku: p.sku,
+          name: p.name,
+          category_id: p.categoryId,
+          category_name: cat ? cat.name : null,
+          uom: p.uom,
+          reorder_point: reorderPoint,
+          total_on_hand: totalOnHand,
+          shortfall: reorderPoint - totalOnHand,
+          severity: 'warning',
+          type: 'reorder_breach',
+          inbound_in_progress: incomingInfo,
+        });
+      } else if (totalOnHand <= reorderPoint * 1.25) {
+        // Less than 25% buffer above reorder threshold
+        alerts.push({
+          id: `alert-buffer-${p.id}`,
+          product_id: p.id,
+          sku: p.sku,
+          name: p.name,
+          category_id: p.categoryId,
+          category_name: cat ? cat.name : null,
+          uom: p.uom,
+          reorder_point: reorderPoint,
+          total_on_hand: totalOnHand,
+          shortfall: Math.max(0, reorderPoint - totalOnHand),
+          severity: 'watchlist',
+          type: 'low_buffer',
+          inbound_in_progress: incomingInfo,
+        });
+      }
+    }
+
+    // Sort by severity (critical stockouts first, then warnings by largest shortfall, then watchlist)
+    const severityOrder = { critical: 0, warning: 1, watchlist: 2 };
+    alerts.sort((a, b) => {
+      if (severityOrder[a.severity] !== severityOrder[b.severity]) {
+        return severityOrder[a.severity] - severityOrder[b.severity];
+      }
+      return b.shortfall - a.shortfall;
+    });
+
+    const stockoutsCount = alerts.filter((a) => a.type === 'stockout').length;
+    const reorderBreachesCount = alerts.filter((a) => a.type === 'reorder_breach').length;
+    const watchlistCount = alerts.filter((a) => a.type === 'low_buffer').length;
+    const totalShortfall = alerts.reduce((sum, a) => sum + (a.shortfall > 0 ? a.shortfall : 0), 0);
+
+    return res.json({
+      summary: {
+        total_urgent: stockoutsCount + reorderBreachesCount,
+        stockouts_count: stockoutsCount,
+        reorder_breaches_count: reorderBreachesCount,
+        watchlist_count: watchlistCount,
+        total_shortfall_units: totalShortfall,
+      },
+      alerts,
+      last_scanned_at: new Date().toISOString(),
+    });
+  });
+
   // In development, mount Vite middleware
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

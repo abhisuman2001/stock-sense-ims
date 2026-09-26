@@ -2,6 +2,7 @@ import React from 'react';
 import { User } from '../types';
 import { ThemeToggle } from './ThemeToggle';
 import { StockSenseLogo } from './StockSenseLogo';
+import { SmartAlertsTray } from './SmartAlertsTray';
 import {
   LayoutDashboard,
   ArrowDownToLine,
@@ -26,6 +27,9 @@ interface NavbarProps {
   onSelectProductsSubTab: (sub: ProductsSubTab) => void;
   user: User | null;
   onLogout: () => void;
+  stockUpdateCounter?: number;
+  onNavigateToCatalogWithSku?: (sku: string) => void;
+  onNavigateToReplenish?: (productId: number, sku: string) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -37,6 +41,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectProductsSubTab,
   user,
   onLogout,
+  stockUpdateCounter = 0,
+  onNavigateToCatalogWithSku,
+  onNavigateToReplenish,
 }) => {
   const isManager =
     user?.role === 'inventory_manager' || (user?.role as any) === 'manager';
@@ -124,8 +131,36 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </nav>
 
-          {/* User Profile, Theme Toggle & Role Badge */}
-          <div className="flex items-center gap-3">
+          {/* User Profile, Theme Toggle & Smart Alerts */}
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Smart Alerts Notification Tray */}
+            {user && (
+              <SmartAlertsTray
+                currentUser={user}
+                stockUpdateCounter={stockUpdateCounter}
+                onNavigateToCatalog={(sku) => {
+                  if (onNavigateToCatalogWithSku && sku) {
+                    onNavigateToCatalogWithSku(sku);
+                  } else {
+                    onSelectProductsSubTab('catalog');
+                    onSelectTab('products');
+                  }
+                }}
+                onNavigateToStockLedger={() => {
+                  onSelectProductsSubTab('stock');
+                  onSelectTab('products');
+                }}
+                onNavigateToReplenish={(productId, sku) => {
+                  if (onNavigateToReplenish) {
+                    onNavigateToReplenish(productId, sku);
+                  } else {
+                    onSelectOperationsSubTab('receipts');
+                    onSelectTab('operations');
+                  }
+                }}
+              />
+            )}
+
             {/* Dark / Light Mode Toggler */}
             <ThemeToggle />
 
