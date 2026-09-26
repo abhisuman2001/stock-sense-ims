@@ -3,6 +3,7 @@ import { User, Operation, OperationType } from './types';
 import { getStoredUser, setStoredUser } from './lib/api';
 import { Navbar, MainNavTab, OperationsSubTab, ProductsSubTab } from './components/Navbar';
 import { AuthScreen } from './components/AuthScreen';
+import { LandingPage } from './components/LandingPage';
 import { DashboardScreen } from './components/DashboardScreen';
 import { OperationsScreen } from './components/OperationsScreen';
 import { ProductsScreen } from './components/ProductsScreen';
@@ -12,20 +13,11 @@ import { StockSenseLogo } from './components/StockSenseLogo';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = getStoredUser();
-    if (saved) return saved;
-    // Default demo user is Sarah Connor (Manager)
-    const defaultUser: User = {
-      id: 1,
-      email: 'demo@stocksense.io',
-      full_name: 'Sarah Connor',
-      role: 'inventory_manager',
-      assigned_warehouse_id: 1,
-      assigned_warehouse_code: 'WH',
-    };
-    localStorage.setItem('stocksense_token', `jwt_token_1_${Date.now()}`);
-    return defaultUser;
+    return getStoredUser();
   });
+
+  // Pre-auth landing and auth mode state: 'landing' | 'login' | 'signup'
+  const [preAuthView, setPreAuthView] = useState<'landing' | 'login' | 'signup'>('landing');
 
   // Navigation state
   const [currentTab, setCurrentTab] = useState<MainNavTab>('dashboard');
@@ -56,6 +48,32 @@ export default function App() {
     setStoredUser(null);
     localStorage.removeItem('stocksense_token');
     setCurrentUser(null);
+    setPreAuthView('landing');
+  };
+
+  const handleDemoLogin = (email: string) => {
+    const isFloor = email === 'staff@stocksense.io';
+    const demoUser: User = isFloor
+      ? {
+          id: 2,
+          email: 'staff@stocksense.io',
+          full_name: 'John Reese',
+          role: 'floor_operator',
+          assigned_warehouse_id: 1,
+          assigned_warehouse_code: 'WH',
+        }
+      : {
+          id: 1,
+          email: 'demo@stocksense.io',
+          full_name: 'Sarah Connor',
+          role: 'inventory_manager',
+          assigned_warehouse_id: 1,
+          assigned_warehouse_code: 'WH',
+        };
+    localStorage.setItem('stocksense_token', `jwt_token_${demoUser.id}_${Date.now()}`);
+    setStoredUser(demoUser);
+    setCurrentUser(demoUser);
+    setCurrentTab('dashboard');
   };
 
   const handleAuthSuccess = (user: User) => {
@@ -94,7 +112,23 @@ export default function App() {
   };
 
   if (!currentUser) {
-    return <AuthScreen onSuccess={handleAuthSuccess} />;
+    if (preAuthView === 'login' || preAuthView === 'signup') {
+      return (
+        <AuthScreen
+          onSuccess={handleAuthSuccess}
+          initialMode={preAuthView}
+          onBackToLanding={() => setPreAuthView('landing')}
+        />
+      );
+    }
+
+    return (
+      <LandingPage
+        onSignIn={() => setPreAuthView('login')}
+        onSignUp={() => setPreAuthView('signup')}
+        onDemoLogin={handleDemoLogin}
+      />
+    );
   }
 
   return (

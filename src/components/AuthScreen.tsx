@@ -2,14 +2,20 @@ import React, { useState } from 'react';
 import { api, setStoredUser } from '../lib/api';
 import { User } from '../types';
 import { StockSenseLogo } from './StockSenseLogo';
-import { Shield, KeyRound, Mail, UserCheck, ArrowRight, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Shield, KeyRound, Mail, UserCheck, ArrowRight, ArrowLeft, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface AuthScreenProps {
   onSuccess: (user: User) => void;
+  initialMode?: 'login' | 'signup';
+  onBackToLanding?: () => void;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
-  const [mode, setMode] = useState<'login' | 'signup' | 'forgot' | 'verify_otp'>('login');
+export const AuthScreen: React.FC<AuthScreenProps> = ({
+  onSuccess,
+  initialMode = 'login',
+  onBackToLanding,
+}) => {
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot' | 'verify_otp'>(initialMode);
 
   // Form fields
   const [email, setEmail] = useState('');
@@ -106,6 +112,19 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
   return (
     <div className="min-h-screen bg-[#1A1816] flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-[#262420] border border-[#34312B] p-8 shadow-none">
+        {onBackToLanding && (
+          <div className="mb-4 pb-3 border-b border-[#34312B]">
+            <button
+              type="button"
+              onClick={onBackToLanding}
+              className="text-xs font-mono text-[#8B8478] hover:text-[#F2C230] flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Overview</span>
+            </button>
+          </div>
+        )}
+
         {/* Brand header */}
         <div className="flex items-center justify-center mb-6 text-center">
           <StockSenseLogo variant="full" size="lg" showSubtitle={true} />
