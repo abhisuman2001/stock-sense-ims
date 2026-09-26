@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { api, setStoredUser } from '../lib/api';
 import { User } from '../types';
-import { ThemeToggle } from './ThemeToggle';
 import { StockSenseLogo } from './StockSenseLogo';
 import { Shield, KeyRound, Mail, UserCheck, ArrowRight, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 
@@ -108,9 +107,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
     <div className="min-h-screen bg-[#1A1816] flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-[#262420] border border-[#34312B] p-8 shadow-none">
         {/* Brand header */}
-        <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="flex items-center justify-center mb-6 text-center">
           <StockSenseLogo variant="full" size="lg" showSubtitle={true} />
-          <ThemeToggle />
         </div>
 
         {/* Status messages */}
