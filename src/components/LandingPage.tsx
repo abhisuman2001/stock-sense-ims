@@ -52,9 +52,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {/* Logo & Brand */}
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
               <StockSenseLogo variant="full" size="md" />
-              <span className="hidden sm:inline text-[9px] font-mono tracking-widest px-1.5 py-0.5 bg-[#E2DDD3] text-[#38342D] border border-[#C8C2B5] uppercase font-bold">
-                IMS
-              </span>
             </div>
 
             {/* Desktop Navigation Links */}
